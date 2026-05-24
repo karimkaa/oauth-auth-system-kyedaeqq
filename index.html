@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Вход | Messenger kyedaeqq</title>
-    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="styles.css?v=26">
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -42,12 +42,12 @@
                     <p>Войдите в свой аккаунт</p>
                 </div>
 
-                <form id="loginForm" class="form">
+                <form id="loginForm" class="form" novalidate>
                     <div class="input-group">
-                        <label for="loginEmail">Email</label>
+                        <label for="loginEmail">Email или ID</label>
                         <div class="input-wrapper">
                             <span class="material-symbols-outlined icon">mail</span>
-                            <input type="email" id="loginEmail" placeholder="ivan@example.com" required>
+                            <input type="text" id="loginEmail" placeholder="ivan@example.com или ID" required>
                         </div>
                     </div>
 
@@ -97,7 +97,7 @@
                     <p>Присоединяйтесь к нашему проекту</p>
                 </div>
 
-                <form id="registrationForm" class="form">
+                <form id="registrationForm" class="form" novalidate>
                     <input type="file" id="regAvatarFile" accept="image/*" style="display: none;">
                     <div class="input-group">
                         <label for="regName">Имя</label>
@@ -108,10 +108,10 @@
                     </div>
                     
                     <div class="input-group">
-                        <label for="regEmail">Email</label>
+                        <label for="regEmail">Email или ID</label>
                         <div class="input-wrapper">
                             <span class="material-symbols-outlined icon">mail</span>
-                            <input type="email" id="regEmail" placeholder="ivan@example.com" required>
+                            <input type="text" id="regEmail" placeholder="ivan@example.com или ID" required>
                         </div>
                     </div>
 
@@ -139,7 +139,9 @@
                         </div>
                     </div>
 
-                    <div class="g-recaptcha" data-sitekey="6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI" style="margin-bottom: 20px; display: flex; justify-content: center; transform: scale(0.9); transform-origin: center;"></div>
+                    <div style="width: 272px; height: 68px; overflow: hidden; position: relative; border-radius: 3px; margin: 0 auto 20px; border: 1px solid rgba(255, 255, 255, 0.08);">
+                        <div class="g-recaptcha" data-sitekey="6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI" data-theme="dark" style="transform: scale(0.9); transform-origin: 0 0; margin-top: -26px; margin-left: -1px;"></div>
+                    </div>
 
                     <button type="submit" class="btn-submit">
                         <span>Зарегистрироваться</span>
@@ -172,14 +174,14 @@
                 <div class="header">
                     <div class="icon-circle"><span class="material-symbols-outlined">lock_reset</span></div>
                     <h1>Восстановление пароля</h1>
-                    <p>Введите ваш email для получения кода</p>
+                    <p>Введите ваш email или ID для получения кода</p>
                 </div>
-                <form id="forgotPasswordForm" class="form">
+                <form id="forgotPasswordForm" class="form" novalidate>
                     <div class="input-group">
-                        <label for="forgotEmail">Email</label>
+                        <label for="forgotEmail">Email или ID</label>
                         <div class="input-wrapper">
                             <span class="material-symbols-outlined icon">mail</span>
-                            <input type="email" id="forgotEmail" placeholder="ivan@example.com" required>
+                            <input type="text" id="forgotEmail" placeholder="ivan@example.com или ID" required>
                         </div>
                     </div>
                     <button type="submit" class="btn-submit">
@@ -345,12 +347,47 @@
 
     <!-- Messenger Interface -->
     <div id="appInterface" class="app-interface">
-        <div class="app-sidebar">
+        <div class="guilds-sidebar" id="guildsSidebar">
+            <div class="guild-item active" id="dmGuildBtn" title="Личные сообщения">
+                <div class="guild-icon dm-icon">
+                    <span class="material-symbols-outlined">forum</span>
+                </div>
+                <div class="guild-indicator"></div>
+            </div>
+            <div class="guild-separator"></div>
+            
+            <!-- Dynamic Guilds List Container -->
+            <div id="dynamicGuildsContainer" style="display: flex; flex-direction: column; gap: 8px;"></div>
+            
+            <div class="guild-item add-guild" id="addGuildBtn" title="Добавить сервер">
+                <div class="guild-icon"><span class="material-symbols-outlined">add</span></div>
+            </div>
+            <div class="guild-item explore-guilds" title="Исследовать публичные серверы">
+                <div class="guild-icon"><span class="material-symbols-outlined">explore</span></div>
+            </div>
+        </div>
+
+        <div class="app-sidebar" id="appSidebar">
             <div class="sidebar-header">
                 <button class="sidebar-search-btn" id="openSearchBtn">
                     <span class="material-symbols-outlined">search</span>
                     Найти или начать беседу
                 </button>
+            </div>
+
+            <div class="sidebar-nav">
+                <div class="sidebar-nav-item active">
+                    <span class="material-symbols-outlined">group</span>
+                    <span>Друзья</span>
+                </div>
+                <div class="sidebar-nav-item">
+                    <span class="material-symbols-outlined">store</span>
+                    <span>Магазин</span>
+                </div>
+            </div>
+            <div class="dm-header">
+                <span>Личные сообщения</span>
+                <button class="btn-icon" id="openSearchBtnPlus" title="Начать беседу"><span class="material-symbols-outlined" style="font-size: 16px;">add</span></button>
             </div>
             
             <div class="contacts-list" id="contactsList">
@@ -358,20 +395,38 @@
                 <div class="contacts-placeholder">Загрузка контактов...</div>
             </div>
 
-            <div class="mini-profile" id="miniProfile">
-                <!-- Mini Profile -->
-                <div class="mini-avatar" id="miniAvatar">
-                    <span class="material-symbols-outlined">account_circle</span>
+            <!-- Server Channels List -->
+            <div class="server-channels-container" id="serverChannelsContainer" style="display: none; flex: 1; flex-direction: column; padding: 8px; overflow: hidden;">
+                <div class="dm-header" style="padding: 10px 8px; border-bottom: 1px solid rgba(255,255,255,0.05); margin-bottom: 8px; cursor: pointer;" id="serverSidebarNameBtn">
+                    <span id="serverSidebarName" style="font-weight: 700; color: #fff; font-size: 14px;">Название Сервера</span>
+                    <span class="material-symbols-outlined" style="font-size:16px; color:#949ba4;">expand_more</span>
                 </div>
-                <div class="mini-info" id="miniLogout" title="Выйти из аккаунта" style="cursor: pointer; transition: opacity 0.2s;" onmouseover="this.style.opacity='0.7'" onmouseout="this.style.opacity='1'">
+                <div class="channels-list" id="channelsList" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 2px;">
+                    <!-- Channels dynamically loaded -->
+                </div>
+            </div>
+
+            <div class="mini-profile" id="miniProfile">
+                <div class="mini-avatar-container">
+                    <div class="mini-avatar" id="miniAvatar">
+                        <span class="material-symbols-outlined">account_circle</span>
+                    </div>
+                    <div class="status-dot online"></div>
+                </div>
+                <div class="mini-info">
                     <div class="mini-name" id="miniName">Имя пользователя</div>
-                    <div class="mini-status" style="color: #ef4444;">Выйти</div>
+                    <div class="mini-tag">В сети</div>
                 </div>
                 <div class="mini-actions">
-                    <button class="btn-icon" id="openSettings"><span class="material-symbols-outlined">settings</span></button>
+                    <button class="btn-icon" title="Выключить микрофон"><span class="material-symbols-outlined">mic</span></button>
+                    <button class="btn-icon" id="openSettings" title="Настройки"><span class="material-symbols-outlined">settings</span></button>
+                    <button class="btn-icon" id="miniLogout" title="Выйти из аккаунта" style="color: #da373c;"><span class="material-symbols-outlined">logout</span></button>
                 </div>
             </div>
         </div>
+
+        <!-- Resize handle between sidebar and chat -->
+        <div class="resize-handle" id="appSidebarHandle"></div>
 
         <div class="chat-main">
             <!-- Main Chat -->
@@ -392,14 +447,27 @@
                     </div>
                 </div>
                 
-                <div id="chatHistory" class="chat-history">
-                    <!-- Messages -->
-                </div>
-
-                <div class="chat-input-container">
-                    <button class="btn-icon"><span class="material-symbols-outlined">add_circle</span></button>
-                    <input type="text" id="chatInput" placeholder="Напишите сообщение...">
-                    <button id="sendMsgBtn" class="btn-icon"><span class="material-symbols-outlined">send</span></button>
+                <div style="display: flex; flex: 1; overflow: hidden; width: 100%;">
+                    <div style="display: flex; flex-direction: column; flex: 1; overflow: hidden;">
+                        <div id="chatHistory" class="chat-history">
+                            <!-- Messages -->
+                        </div>
+                        <!-- Reply bar -->
+                        <div class="reply-bar" id="replyBar">
+                            <span class="material-symbols-outlined" style="font-size:16px; color:#5865f2;">reply</span>
+                            Ответ для <span class="reply-name" id="replyBarName"></span>
+                            <span class="material-symbols-outlined reply-close" id="replyBarClose">close</span>
+                        </div>
+                        <div class="chat-input-container">
+                            <input type="file" id="attachmentInput" style="display: none;">
+                            <button class="btn-icon" id="uploadAttachmentBtn" title="Прикрепить файл"><span class="material-symbols-outlined">add_circle</span></button>
+                            <input type="text" id="chatInput" placeholder="Напишите сообщение...">
+                            <button id="sendMsgBtn" class="btn-icon"><span class="material-symbols-outlined">send</span></button>
+                        </div>
+                    </div>
+                    <!-- Resize handle before members sidebar -->
+                    <div class="resize-handle" id="membersSidebarHandle"></div>
+                    <div id="membersSidebar"></div>
                 </div>
             </div>
         </div>
@@ -429,8 +497,463 @@
         </div>
     </div>
 
+    <!-- Create Server Modal — Discord Style -->
+    <div id="createServerModal">
+        <div class="create-server-card">
+            <button class="create-server-close" id="closeCreateServerBtn">
+                <span class="material-symbols-outlined" style="font-size:18px;">close</span>
+            </button>
+            <div class="create-server-header">
+                <h2>Персонализируйте свой сервер</h2>
+                <p>Персонализируйте свой новый сервер, выбрав ему название и значок. Их можно будет изменить в любой момент.</p>
+            </div>
+            <!-- Icon Upload -->
+            <div class="server-icon-upload-area" id="createServerIconArea">
+                <div class="server-icon-upload-circle" id="createServerIconCircle">
+                    <div class="upload-icon-label" id="createServerIconLabel">
+                        <span class="material-symbols-outlined">photo_camera</span>
+                        <span class="upload-text">Upload</span>
+                    </div>
+                    <img id="createServerIconPreview" src="" style="display:none; position:absolute; inset:0;">
+                    <div class="server-icon-plus-badge">+</div>
+                </div>
+            </div>
+            <input type="file" id="createServerIconFile" accept="image/*" style="display:none;">
+            <div class="create-server-body">
+                <div class="create-server-field">
+                    <label for="serverNameInput">Название сервера <span class="required">*</span></label>
+                    <input type="text" id="serverNameInput" placeholder="Мой сервер" autocomplete="off">
+                </div>
+                <p class="create-server-tos">Создавая сервер, вы соглашаетесь с <a href="#">Правилами Сообщества</a>.</p>
+            </div>
+            <div class="create-server-footer">
+                <button class="create-server-back" id="cancelCreateServerBtn">Назад</button>
+                <button class="create-server-submit" id="submitCreateServerBtn">Создать</button>
+            </div>
+        </div>
+    </div>
+    <!-- Hidden compat input for old code -->
+    <input type="hidden" id="serverIconInput" value="">
+
+    <!-- Context Menu for Server (Right click) -->
+    <div id="serverContextMenu" class="context-menu glass-panel" style="display: none; position: absolute; z-index: 10000; min-width: 220px; background: rgba(22, 23, 27, 0.95); backdrop-filter: blur(20px); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 6px; padding: 6px; box-shadow: 0 8px 16px rgba(0, 0, 0, 0.5); font-family: inherit;">
+        <div class="context-menu-item" id="ctxMarkRead" style="display: flex; align-items: center; justify-content: space-between; padding: 8px 10px; color: #dbdee1; font-size: 13px; cursor: pointer; border-radius: 4px; transition: background 0.1s, color 0.1s;">
+            <span>Пометить как прочитанное</span>
+        </div>
+        <div class="context-menu-item" id="ctxInvite" style="display: flex; align-items: center; justify-content: space-between; padding: 8px 10px; color: #5865f2; font-size: 13px; font-weight: 500; cursor: pointer; border-radius: 4px; transition: background 0.1s, color 0.1s;">
+            <span>Пригласить на сервер</span>
+        </div>
+        <div style="height: 1px; background: rgba(255, 255, 255, 0.06); margin: 4px 6px;"></div>
+        <div class="context-menu-item" id="ctxMute" style="display: flex; align-items: center; justify-content: space-between; padding: 8px 10px; color: #dbdee1; font-size: 13px; cursor: pointer; border-radius: 4px; transition: background 0.1s, color 0.1s;">
+            <span>Включить оповещения сервера</span>
+        </div>
+        <div class="context-menu-item" id="ctxSettings" style="display: flex; align-items: center; justify-content: space-between; padding: 8px 10px; color: #dbdee1; font-size: 13px; cursor: pointer; border-radius: 4px; transition: background 0.1s, color 0.1s;">
+            <span>Настройки сервера</span>
+            <span class="material-symbols-outlined" style="font-size: 16px;">chevron_right</span>
+        </div>
+        <div style="height: 1px; background: rgba(255, 255, 255, 0.06); margin: 4px 6px;"></div>
+        <div class="context-menu-item" id="ctxLeave" style="display: flex; align-items: center; justify-content: space-between; padding: 8px 10px; color: #fa777c; font-size: 13px; font-weight: 500; cursor: pointer; border-radius: 4px; transition: background 0.1s, color 0.1s;">
+            <span>Покинуть сервер</span>
+            <span class="material-symbols-outlined" style="font-size: 16px;">logout</span>
+        </div>
+    </div>
+
+    <!-- Invite Server Modal -->
+    <div class="search-modal-overlay" id="inviteServerModal" style="display: none; justify-content: center; align-items: center; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.6); z-index: 10001;">
+        <div class="search-modal-content glass-panel" style="background: rgba(15, 23, 42, 0.75); backdrop-filter: blur(40px); border: 1px solid rgba(255, 255, 255, 0.08); width: 100%; max-width: 440px; border-radius: 8px;">
+            <div class="search-modal-header" style="background: transparent; border-bottom: 1px solid rgba(255, 255, 255, 0.05); padding: 20px;">
+                <h3 style="margin: 0; color: #fff; font-size: 20px; font-weight: 700; text-align: center;">Пригласить друзей на сервер</h3>
+                <p id="inviteServerName" style="margin: 8px 0 0 0; color: #949ba4; font-size: 13px; text-align: center;">Поделитесь этой ссылкой с друзьями, чтобы они могли присоединиться!</p>
+            </div>
+            <div style="padding: 20px;">
+                <div class="input-wrapper" style="display: flex; flex-direction: column;">
+                    <label style="display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; color: #b5bac1; margin-bottom: 8px; letter-spacing: 0.5px;">Ссылка для приглашения</label>
+                    <div style="display: flex; gap: 10px;">
+                        <input type="text" id="inviteLinkInput" readonly style="flex: 1; background: rgba(0, 0, 0, 0.3); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 8px; padding: 12px 15px; color: #fff; font-size: 14px; outline: none;" value="">
+                        <button id="copyInviteLinkBtn" style="background: #5865f2; border: none; border-radius: 4px; color: #fff; cursor: pointer; padding: 0 20px; font-size: 14px; font-weight: 500; font-family: inherit; transition: background 0.2s;">Копировать</button>
+                    </div>
+                </div>
+            </div>
+            <div class="search-modal-footer" style="background: rgba(0, 0, 0, 0.2); border-top: 1px solid rgba(255, 255, 255, 0.05); display: flex; justify-content: flex-end; padding: 16px 20px;">
+                <button id="closeInviteModalBtn" style="background: #5865f2; border: none; border-radius: 4px; color: #fff; cursor: pointer; padding: 10px 20px; font-size: 14px; font-weight: 500; font-family: inherit;">Закрыть</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Discord style Server Settings Modal (Full Screen Overlay) -->
+    <div id="discordServerSettingsModal" style="display: none; position: fixed; inset: 0; background: rgba(10, 10, 12, 0.4); backdrop-filter: blur(45px); -webkit-backdrop-filter: blur(45px); z-index: 20000; align-items: stretch; justify-content: center; color: #f2f3f5; font-family: 'Inter', sans-serif;">
+        <div style="display: flex; width: 100%; max-width: 1200px; margin: 0 auto; height: 100vh; overflow: hidden; position: relative;">
+            <!-- Left Sidebar -->
+            <div style="width: 280px; background: rgba(22, 24, 27, 0.45); border-right: 1px solid rgba(255, 255, 255, 0.05); padding: 40px 20px; display: flex; flex-direction: column; gap: 20px; overflow-y: auto; flex-shrink: 0; box-sizing: border-box;">
+                <div style="font-size: 11px; font-weight: 700; color: #949ba4; text-transform: uppercase; letter-spacing: 0.5px; padding: 0 10px;" id="serverSettingsHeaderTitle">СЕРВЕР</div>
+                
+                <div class="settings-menu-list" style="display: flex; flex-direction: column; gap: 2px;">
+                    <div class="server-settings-menu-item active" data-section="profile" style="padding: 8px 10px; font-size: 14px; color: #dbdee1; border-radius: 4px; cursor: pointer; display: flex; align-items: center; transition: background 0.2s;">Профиль сервера</div>
+                    <div class="server-settings-menu-item" data-section="tag" style="padding: 8px 10px; font-size: 14px; color: #949ba4; border-radius: 4px; cursor: pointer; display: flex; align-items: center; transition: background 0.2s;">Тег сервера</div>
+                    <div class="server-settings-menu-item" data-section="engagement" style="padding: 8px 10px; font-size: 14px; color: #949ba4; border-radius: 4px; cursor: pointer; display: flex; align-items: center; transition: background 0.2s;">Вовлечённость</div>
+                    <div class="server-settings-menu-item" data-section="boosts" style="padding: 8px 10px; font-size: 14px; color: #949ba4; border-radius: 4px; cursor: pointer; display: flex; align-items: center; transition: background 0.2s;">Бонусы буста</div>
+                    
+                    <div style="font-size: 11px; font-weight: 700; color: #949ba4; text-transform: uppercase; letter-spacing: 0.5px; margin: 15px 0 5px 10px;">Реакции</div>
+                    <div class="server-settings-menu-item" data-section="emojis" style="padding: 8px 10px; font-size: 14px; color: #949ba4; border-radius: 4px; cursor: pointer; display: flex; align-items: center; transition: background 0.2s;">Эмодзи</div>
+                    <div class="server-settings-menu-item" data-section="stickers" style="padding: 8px 10px; font-size: 14px; color: #949ba4; border-radius: 4px; cursor: pointer; display: flex; align-items: center; transition: background 0.2s;">Стикеры</div>
+                    <div class="server-settings-menu-item" data-section="soundboard" style="padding: 8px 10px; font-size: 14px; color: #949ba4; border-radius: 4px; cursor: pointer; display: flex; align-items: center; transition: background 0.2s;">Звуковая панель</div>
+
+                    <div style="font-size: 11px; font-weight: 700; color: #949ba4; text-transform: uppercase; letter-spacing: 0.5px; margin: 15px 0 5px 10px;">Люди</div>
+                    <div class="server-settings-menu-item" data-section="members" style="padding: 8px 10px; font-size: 14px; color: #949ba4; border-radius: 4px; cursor: pointer; display: flex; align-items: center; transition: background 0.2s;">Участники</div>
+                    <div class="server-settings-menu-item" data-section="roles" style="padding: 8px 10px; font-size: 14px; color: #949ba4; border-radius: 4px; cursor: pointer; display: flex; align-items: center; transition: background 0.2s;">Роли</div>
+                    <div class="server-settings-menu-item" data-section="invites" style="padding: 8px 10px; font-size: 14px; color: #949ba4; border-radius: 4px; cursor: pointer; display: flex; align-items: center; transition: background 0.2s;">Приглашения</div>
+                    <div class="server-settings-menu-item" data-section="access" style="padding: 8px 10px; font-size: 14px; color: #949ba4; border-radius: 4px; cursor: pointer; display: flex; align-items: center; transition: background 0.2s;">Доступ</div>
+
+                    <div style="font-size: 11px; font-weight: 700; color: #949ba4; text-transform: uppercase; letter-spacing: 0.5px; margin: 15px 0 5px 10px;">Приложения</div>
+                    <div class="server-settings-menu-item" data-section="integrations" style="padding: 8px 10px; font-size: 14px; color: #949ba4; border-radius: 4px; cursor: pointer; display: flex; align-items: center; transition: background 0.2s;">Интеграция</div>
+                    <div class="server-settings-menu-item" data-section="app_directory" style="padding: 8px 10px; font-size: 14px; color: #949ba4; border-radius: 4px; cursor: pointer; display: flex; align-items: center; transition: background 0.2s;">Каталог приложений</div>
+
+                    <div style="font-size: 11px; font-weight: 700; color: #949ba4; text-transform: uppercase; letter-spacing: 0.5px; margin: 15px 0 5px 10px;">Модерация</div>
+                    <div class="server-settings-menu-item" data-section="security" style="padding: 8px 10px; font-size: 14px; color: #949ba4; border-radius: 4px; cursor: pointer; display: flex; align-items: center; transition: background 0.2s;">Настройка безопасности</div>
+                    <div class="server-settings-menu-item" data-section="audit_log" style="padding: 8px 10px; font-size: 14px; color: #949ba4; border-radius: 4px; cursor: pointer; display: flex; align-items: center; transition: background 0.2s;">Журнал аудита</div>
+                    <div class="server-settings-menu-item" data-section="bans" style="padding: 8px 10px; font-size: 14px; color: #949ba4; border-radius: 4px; cursor: pointer; display: flex; align-items: center; transition: background 0.2s;">Баны</div>
+                    <div class="server-settings-menu-item" data-section="automod" style="padding: 8px 10px; font-size: 14px; color: #949ba4; border-radius: 4px; cursor: pointer; display: flex; align-items: center; transition: background 0.2s;">Автомод</div>
+                </div>
+            </div>
+
+            <!-- Right Content Area -->
+            <div style="flex: 1; padding: 60px 40px; overflow-y: auto; box-sizing: border-box; display: flex; gap: 40px; align-items: flex-start;">
+                <!-- Main Form Section -->
+                <div id="sectionServerProfile" style="flex: 1; display: flex; flex-direction: column; gap: 24px;">
+                    <div>
+                        <h2 style="font-size: 20px; font-weight: 700; color: #fff; margin: 0 0 8px 0;">Профиль сервера</h2>
+                        <p style="font-size: 13px; color: #949ba4; line-height: 1.4; margin: 0;">Настройте отображение вашего сервера в ссылках-приглашениях, а также сообщениях «Путешествие по серверам» и канала с объявлениями, если эти функции активны</p>
+                    </div>
+
+                    <!-- Server Name input -->
+                    <div style="display: flex; flex-direction: column; gap: 8px;">
+                        <label style="font-size: 12px; font-weight: 700; color: #b5bac1; text-transform: uppercase; letter-spacing: 0.5px;">Имя сервера</label>
+                        <input type="text" id="serverSettingsNameInput" style="background: rgba(15, 18, 22, 0.45); border: 1px solid rgba(255,255,255,0.08); border-radius: 4px; padding: 10px 14px; color: #fff; font-size: 15px; outline: none; width: 100%; box-sizing: border-box;">
+                    </div>
+
+                    <!-- Server Icon hidden input (auto-generated from name) -->
+                    <input type="hidden" id="serverSettingsIconInput">
+                    <!-- Hidden file input for server icon upload in settings -->
+                    <input type="file" id="serverSettingsIconFile" accept="image/*" style="display:none;">
+
+                    <!-- Icon section -->
+                    <div style="display: flex; flex-direction: column; gap: 8px;">
+                        <label style="font-size: 12px; font-weight: 700; color: #b5bac1; text-transform: uppercase; letter-spacing: 0.5px;">Значок</label>
+                        <p style="font-size: 12px; color: #949ba4; margin: 0 0 5px 0;">Мы рекомендуем использовать изображения размером как минимум 512x512.</p>
+                        <div style="display: flex; gap: 10px; align-items: center;">
+                            <button id="serverSettingsChangeIconBtn" style="background: #248046; border: none; border-radius: 4px; color: #fff; padding: 10px 20px; font-size: 13px; font-weight: 500; cursor: pointer; transition: background 0.2s;">Изменить значок сервера</button>
+                            <button id="serverSettingsDeleteIconBtn" style="background: transparent; border: 1px solid rgba(255,255,255,0.15); border-radius: 4px; color: #fff; padding: 10px 20px; font-size: 13px; font-weight: 500; cursor: pointer; transition: background 0.2s;">Удалить значок</button>
+                        </div>
+                    </div>
+
+                    <!-- Banner Palette -->
+                    <div style="display: flex; flex-direction: column; gap: 8px;">
+                        <label style="font-size: 12px; font-weight: 700; color: #b5bac1; text-transform: uppercase; letter-spacing: 0.5px;">Баннер</label>
+                        <div id="serverBannerPalette" style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; max-width: 400px;">
+                            <div class="banner-color-option active" data-color="linear-gradient(135deg, #2c1f38, #180f24)" style="height: 40px; border-radius: 4px; cursor: pointer; border: 2px solid #fff; background: linear-gradient(135deg, #2c1f38, #180f24);"></div>
+                            <div class="banner-color-option" data-color="linear-gradient(135deg, #ff4081, #ff80ab)" style="height: 40px; border-radius: 4px; cursor: pointer; border: 2px solid transparent; background: linear-gradient(135deg, #ff4081, #ff80ab);"></div>
+                            <div class="banner-color-option" data-color="linear-gradient(135deg, #f44336, #e91e63)" style="height: 40px; border-radius: 4px; cursor: pointer; border: 2px solid transparent; background: linear-gradient(135deg, #f44336, #e91e63);"></div>
+                            <div class="banner-color-option" data-color="linear-gradient(135deg, #ff9800, #ffc107)" style="height: 40px; border-radius: 4px; cursor: pointer; border: 2px solid transparent; background: linear-gradient(135deg, #ff9800, #ffc107);"></div>
+                            <div class="banner-color-option" data-color="linear-gradient(135deg, #ffd600, #ffea00)" style="height: 40px; border-radius: 4px; cursor: pointer; border: 2px solid transparent; background: linear-gradient(135deg, #ffd600, #ffea00);"></div>
+                            <div class="banner-color-option" data-color="linear-gradient(135deg, #9c27b0, #673ab7)" style="height: 40px; border-radius: 4px; cursor: pointer; border: 2px solid transparent; background: linear-gradient(135deg, #9c27b0, #673ab7);"></div>
+                            <div class="banner-color-option" data-color="linear-gradient(135deg, #2196f3, #03a9f4)" style="height: 40px; border-radius: 4px; cursor: pointer; border: 2px solid transparent; background: linear-gradient(135deg, #2196f3, #03a9f4);"></div>
+                            <div class="banner-color-option" data-color="linear-gradient(135deg, #00ebc7, #00a8cc)" style="height: 40px; border-radius: 4px; cursor: pointer; border: 2px solid transparent; background: linear-gradient(135deg, #00ebc7, #00a8cc);"></div>
+                            <div class="banner-color-option" data-color="linear-gradient(135deg, #4caf50, #8bc34a)" style="height: 40px; border-radius: 4px; cursor: pointer; border: 2px solid transparent; background: linear-gradient(135deg, #4caf50, #8bc34a);"></div>
+                            <div class="banner-color-option" data-color="linear-gradient(135deg, #37474f, #212121)" style="height: 40px; border-radius: 4px; cursor: pointer; border: 2px solid transparent; background: linear-gradient(135deg, #37474f, #212121);"></div>
+                        </div>
+                    </div>
+
+                    <!-- Features -->
+                    <div style="display: flex; flex-direction: column; gap: 8px;">
+                        <label style="font-size: 12px; font-weight: 700; color: #b5bac1; text-transform: uppercase; letter-spacing: 0.5px;">Особенности</label>
+                        <p style="font-size: 12px; color: #949ba4; margin: 0 0 5px 0;">Добавьте до 5 особенностей, соответствующих интересам и характеру участников вашего сервера.</p>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                            <div style="background: rgba(15, 18, 22, 0.45); border-radius: 6px; padding: 12px; border: 1px solid rgba(255,255,255,0.05); display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                                <span class="material-symbols-outlined" style="font-size: 20px; color: #b5bac1;">sentiment_satisfied</span>
+                                <span style="font-size: 13px; color: #dbdee1;">Игры и гейминг</span>
+                            </div>
+                            <div style="background: rgba(15, 18, 22, 0.45); border-radius: 6px; padding: 12px; border: 1px solid rgba(255,255,255,0.05); display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                                <span class="material-symbols-outlined" style="font-size: 20px; color: #b5bac1;">sentiment_satisfied</span>
+                                <span style="font-size: 13px; color: #dbdee1;">Программирование</span>
+                            </div>
+                            <div style="background: rgba(15, 18, 22, 0.45); border-radius: 6px; padding: 12px; border: 1px solid rgba(255,255,255,0.05); display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                                <span class="material-symbols-outlined" style="font-size: 20px; color: #b5bac1;">sentiment_satisfied</span>
+                                <span style="font-size: 13px; color: #dbdee1;">Музыка и общение</span>
+                            </div>
+                            <div style="background: rgba(15, 18, 22, 0.45); border-radius: 6px; padding: 12px; border: 1px solid rgba(255,255,255,0.05); display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                                <span class="material-symbols-outlined" style="font-size: 20px; color: #b5bac1;">sentiment_satisfied</span>
+                                <span style="font-size: 13px; color: #dbdee1;">Аниме и сериалы</span>
+                            </div>
+                            <div style="background: rgba(15, 18, 22, 0.45); border-radius: 6px; padding: 12px; border: 1px solid rgba(255,255,255,0.05); display: flex; align-items: center; gap: 10px; cursor: pointer; grid-column: span 2;">
+                                <span class="material-symbols-outlined" style="font-size: 20px; color: #b5bac1;">sentiment_satisfied</span>
+                                <span style="font-size: 13px; color: #dbdee1;">Креативное творчество</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Save Settings trigger footer -->
+                    <div style="display: flex; gap: 12px; margin-top: 10px;">
+                        <button id="serverSettingsSaveBtn" style="background: #248046; border: none; border-radius: 4px; color: #fff; cursor: pointer; padding: 12px 24px; font-size: 14px; font-weight: 500; font-family: inherit; transition: background 0.2s;">Сохранить изменения</button>
+                    </div>
+                </div>
+
+                <!-- Fallback / Mock Sections -->
+                <div id="sectionServerMockSettings" style="display: none; justify-content: center; align-items: center; flex: 1; flex-direction: column; text-align: center; gap: 15px; height: 300px; box-sizing: border-box;">
+                    <span class="material-symbols-outlined" style="font-size: 64px; color: #5865f2; opacity: 0.8;">settings</span>
+                    <h3 id="serverMockSectionTitle" style="font-size: 18px; font-weight: 700; color: #fff; margin: 0;">Настройка</h3>
+                    <p style="font-size: 14px; color: #949ba4; max-width: 400px; margin: 0;">Этот раздел настроек сервера доступен в Premium сборке. Вы можете настроить основные параметры в разделе "Профиль сервера".</p>
+                </div>
+
+                <!-- Preview Card Widget -->
+                <div style="width: 320px; background: rgba(15, 18, 22, 0.65); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; overflow: hidden; flex-shrink: 0; box-shadow: 0 12px 24px rgba(0,0,0,0.4);" id="serverSettingsPreviewCard">
+                    <!-- Banner -->
+                    <div id="serverSettingsPreviewBanner" style="height: 100px; background: linear-gradient(135deg, #2c1f38, #180f24); position: relative; transition: background 0.3s ease;">
+                    </div>
+                    <!-- Info Panel -->
+                    <div style="padding: 16px; position: relative;">
+                        <!-- Server Icon Circular Preview -->
+                        <div id="serverSettingsPreviewIconContainer" style="width: 64px; height: 64px; border-radius: 50%; background: #5865f2; border: 4px solid #111214; display: flex; align-items: center; justify-content: center; position: absolute; top: -32px; left: 16px; overflow: hidden; cursor: pointer;" title="Изменить значок сервера">
+                            <span id="serverSettingsPreviewIconText" style="font-size: 20px; font-weight: 700; color: #fff; text-transform: uppercase;"></span>
+                            <!-- Camera overlay on hover -->
+                            <div style="position: absolute; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.2s;" onmouseenter="this.style.opacity='1'" onmouseleave="this.style.opacity='0'">
+                                <span class="material-symbols-outlined" style="color: #fff; font-size: 22px;">photo_camera</span>
+                            </div>
+                        </div>
+                        
+                        <div style="margin-top: 40px;">
+                            <h3 id="serverSettingsPreviewName" style="font-size: 16px; font-weight: 700; color: #fff; margin: 0 0 6px 0;"></h3>
+                            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px;">
+                                <div style="display: flex; align-items: center; gap: 4px; font-size: 12px; color: #23a55a;">
+                                    <span style="width: 8px; height: 8px; border-radius: 50%; background: #23a55a;"></span>
+                                    <span id="serverSettingsPreviewOnlineCount">1 в сети</span>
+                                </div>
+                                <div style="display: flex; align-items: center; gap: 4px; font-size: 12px; color: #b5bac1;">
+                                    <span style="width: 8px; height: 8px; border-radius: 50%; background: #b5bac1;"></span>
+                                    <span id="serverSettingsPreviewTotalCount">1 участник</span>
+                                </div>
+                            </div>
+                            <div style="font-size: 12px; color: #949ba4;">Дата основания: май 2026 г.</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Absolute Close Button in Top Right -->
+            <div style="position: absolute; right: 40px; top: 40px; display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer; z-index: 10;" id="closeDiscordServerSettingsBtn">
+                <div style="width: 36px; height: 36px; border-radius: 50%; border: 2px solid rgba(255, 255, 255, 0.4); display: flex; align-items: center; justify-content: center; transition: border-color 0.2s, background 0.2s;">
+                    <span class="material-symbols-outlined" style="font-size: 18px; color: #fff;">close</span>
+                </div>
+                <span style="font-size: 12px; font-weight: 700; color: rgba(255,255,255,0.4); text-transform: uppercase; letter-spacing: 0.5px;">ESC</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Discord style Settings Modal (Full Screen Overlay) -->
+    <div id="discordSettingsModal" style="display: none; position: fixed; inset: 0; background: rgba(10, 10, 12, 0.4); backdrop-filter: blur(45px); -webkit-backdrop-filter: blur(45px); z-index: 20000; align-items: stretch; justify-content: center; color: #f2f3f5; font-family: 'Inter', sans-serif;">
+        <div style="display: flex; width: 100%; max-width: 1200px; margin: 0 auto; height: 100vh; overflow: hidden; position: relative;">
+            <!-- Left Sidebar -->
+            <div style="width: 280px; background: rgba(22, 24, 27, 0.45); border-right: 1px solid rgba(255, 255, 255, 0.05); padding: 40px 20px; display: flex; flex-direction: column; gap: 20px; overflow-y: auto; flex-shrink: 0; box-sizing: border-box;">
+                <!-- Mini User Info -->
+                <div style="display: flex; align-items: center; gap: 10px; padding: 10px; background: rgba(255, 255, 255, 0.03); border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.05);">
+                    <div id="settingsMiniAvatar" style="width: 38px; height: 38px; border-radius: 50%; overflow: hidden; background: #5865f2; display: flex; align-items: center; justify-content: center;">
+                        <span class="material-symbols-outlined" style="font-size: 28px; color: #fff;">account_circle</span>
+                    </div>
+                    <div style="flex: 1; min-width: 0;">
+                        <div id="settingsMiniName" style="font-size: 14px; font-weight: 700; color: #fff; text-overflow: ellipsis; overflow: hidden; white-space: nowrap;">-karimkaaaaaa</div>
+                        <div style="font-size: 11px; color: #949ba4; cursor: pointer;" id="settingsEditProfileTrigger">Редактировать профиль..</div>
+                    </div>
+                </div>
+
+                <!-- Search -->
+                <div style="position: relative;">
+                    <input type="text" placeholder="Поиск" style="width: 100%; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.08); border-radius: 4px; padding: 8px 12px; color: #fff; font-size: 13px; outline: none; box-sizing: border-box;">
+                </div>
+
+                <!-- Menu List -->
+                <div class="settings-menu-list" style="display: flex; flex-direction: column; gap: 2px;">
+                    <div class="settings-menu-item active" data-section="my_account" style="padding: 8px 10px; font-size: 14px; color: #dbdee1; border-radius: 4px; cursor: pointer; display: flex; align-items: center; transition: background 0.2s;">Моя учётная запись</div>
+                    <div class="settings-menu-item" data-section="content_social" style="padding: 8px 10px; font-size: 14px; color: #949ba4; border-radius: 4px; cursor: pointer; display: flex; align-items: center; transition: background 0.2s;">Контент и общение</div>
+                    <div class="settings-menu-item" data-section="privacy" style="padding: 8px 10px; font-size: 14px; color: #949ba4; border-radius: 4px; cursor: pointer; display: flex; align-items: center; transition: background 0.2s;">Данные и конфиденциальность</div>
+                    <div class="settings-menu-item" data-section="family" style="padding: 8px 10px; font-size: 14px; color: #949ba4; border-radius: 4px; cursor: pointer; display: flex; align-items: center; transition: background 0.2s;">Семейный центр</div>
+                    <div class="settings-menu-item" data-section="authorized_apps" style="padding: 8px 10px; font-size: 14px; color: #949ba4; border-radius: 4px; cursor: pointer; display: flex; align-items: center; transition: background 0.2s;">Авторизованные приложения</div>
+                    <div class="settings-menu-item" data-section="devices" style="padding: 8px 10px; font-size: 14px; color: #949ba4; border-radius: 4px; cursor: pointer; display: flex; align-items: center; transition: background 0.2s;">Устройства</div>
+                    <div class="settings-menu-item" data-section="integrations" style="padding: 8px 10px; font-size: 14px; color: #949ba4; border-radius: 4px; cursor: pointer; display: flex; align-items: center; transition: background 0.2s;">Интеграции</div>
+                    <div class="settings-menu-item" data-section="notifications" style="padding: 8px 10px; font-size: 14px; color: #949ba4; border-radius: 4px; cursor: pointer; display: flex; align-items: center; transition: background 0.2s;">Уведомления</div>
+                    
+                    <div style="font-size: 11px; font-weight: 700; color: #949ba4; text-transform: uppercase; margin: 15px 0 5px 10px; letter-spacing: 0.5px;">Vencord Settings</div>
+                    <div class="settings-menu-item" data-section="vencord" style="padding: 8px 10px; font-size: 14px; color: #949ba4; border-radius: 4px; cursor: pointer; display: flex; align-items: center; transition: background 0.2s;">Vencord</div>
+                    <div class="settings-menu-item" data-section="plugins" style="padding: 8px 10px; font-size: 14px; color: #949ba4; border-radius: 4px; cursor: pointer; display: flex; align-items: center; transition: background 0.2s;">Plugins</div>
+                    <div class="settings-menu-item" data-section="themes" style="padding: 8px 10px; font-size: 14px; color: #949ba4; border-radius: 4px; cursor: pointer; display: flex; align-items: center; transition: background 0.2s;">Themes</div>
+                    <div class="settings-menu-item" data-section="updater" style="padding: 8px 10px; font-size: 14px; color: #949ba4; border-radius: 4px; cursor: pointer; display: flex; align-items: center; transition: background 0.2s;">Updater</div>
+                    <div class="settings-menu-item" data-section="cloud" style="padding: 8px 10px; font-size: 14px; color: #949ba4; border-radius: 4px; cursor: pointer; display: flex; align-items: center; transition: background 0.2s;">Cloud</div>
+                    <div class="settings-menu-item" data-section="backup" style="padding: 8px 10px; font-size: 14px; color: #949ba4; border-radius: 4px; cursor: pointer; display: flex; align-items: center; transition: background 0.2s;">Backup & Restore</div>
+                </div>
+            </div>
+
+            <!-- Right Content Area -->
+            <div style="flex: 1; background: rgba(30, 33, 37, 0.15); padding: 60px 40px; overflow-y: auto; box-sizing: border-box; display: flex; flex-direction: column;">
+                
+                <!-- My Account Section -->
+                <div id="sectionMyAccount" class="settings-content-section" style="display: block;">
+                    <h2 style="font-size: 20px; font-weight: 700; color: #fff; margin: 0 0 10px 0;">Моя учётная запись</h2>
+                    
+                    <!-- Tabs -->
+                    <div style="display: flex; gap: 20px; border-bottom: 1px solid rgba(255,255,255,0.06); padding-bottom: 10px; margin-bottom: 20px;">
+                        <span style="font-size: 14px; font-weight: 600; color: #fff; border-bottom: 2px solid #5865f2; padding-bottom: 10px; cursor: pointer;">Безопасность</span>
+                        <span style="font-size: 14px; font-weight: 600; color: #949ba4; padding-bottom: 10px; cursor: pointer;">Репутация</span>
+                    </div>
+
+                    <!-- Profile Preview Card -->
+                    <div class="profile-card-container" style="background: rgba(15, 18, 22, 0.55); border-radius: 8px; overflow: hidden; border: 1px solid rgba(255,255,255,0.05); margin-bottom: 25px;">
+                        <!-- Banner -->
+                        <div style="height: 100px; background: linear-gradient(135deg, #5865f2 0%, #854eee 100%); position: relative;">
+                            <!-- Edit Profile Button overlaid on Banner -->
+                            <button id="settingsEditUserCardBtn" style="position: absolute; right: 16px; bottom: -36px; background: #248046; border: none; border-radius: 3px; color: #fff; padding: 7px 16px; font-size: 13px; font-weight: 500; cursor: pointer; transition: background 0.2s;">Редактировать профиль пользователя</button>
+                        </div>
+                        
+                        <!-- Avatar Overlap -->
+                        <div style="padding: 0 16px 16px 16px; position: relative;">
+                            <div id="settingsAvatarContainer" style="width: 80px; height: 80px; border-radius: 50%; border: 6px solid #111214; background: #5865f2; overflow: hidden; position: absolute; top: -45px; left: 16px; cursor: pointer; box-shadow: 0 4px 10px rgba(0,0,0,0.3); display: flex; align-items: center; justify-content: center;">
+                                <span class="material-symbols-outlined" style="font-size: 60px; color: #fff;">account_circle</span>
+                            </div>
+                            
+                            <!-- Nickname next to avatar -->
+                            <div style="margin-left: 110px; height: 45px; display: flex; align-items: center; justify-content: space-between;">
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <span id="settingsProfileNick" style="font-size: 18px; font-weight: 700; color: #fff;">-karimkaaaaaa</span>
+                                    <span class="material-symbols-outlined" style="font-size: 18px; color: #5865f2;">stars</span>
+                                </div>
+                            </div>
+
+                            <!-- Details list in box -->
+                            <div style="margin-top: 30px; background: rgba(0,0,0,0.25); border-radius: 8px; padding: 16px; display: flex; flex-direction: column; gap: 16px;">
+                                <!-- Field: Display Name -->
+                                <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.03); padding-bottom: 12px;">
+                                    <div>
+                                        <div style="font-size: 11px; font-weight: 700; color: #b5bac1; text-transform: uppercase;">Отображаемое имя</div>
+                                        <div id="settingsValDisplayName" style="font-size: 14px; color: #fff; margin-top: 4px;">-karimkaaaaaa</div>
+                                    </div>
+                                    <button class="settings-change-btn" data-field="display_name" style="background: #4f545c; border: none; border-radius: 3px; color: #fff; padding: 6px 16px; font-size: 13px; font-weight: 500; cursor: pointer; transition: background 0.2s;">Изменить</button>
+                                </div>
+
+                                <!-- Field: Username -->
+                                <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.03); padding-bottom: 12px;">
+                                    <div>
+                                        <div style="font-size: 11px; font-weight: 700; color: #b5bac1; text-transform: uppercase;">Имя пользователя</div>
+                                        <div id="settingsValUsername" style="font-size: 14px; color: #fff; margin-top: 4px;">pivapivaseeek</div>
+                                    </div>
+                                    <button class="settings-change-btn" data-field="username" style="background: #4f545c; border: none; border-radius: 3px; color: #fff; padding: 6px 16px; font-size: 13px; font-weight: 500; cursor: pointer; transition: background 0.2s;">Изменить</button>
+                                </div>
+
+                                <!-- Field: Email -->
+                                <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.03); padding-bottom: 12px;">
+                                    <div>
+                                        <div style="font-size: 11px; font-weight: 700; color: #b5bac1; text-transform: uppercase;">Электронная почта</div>
+                                        <div style="display: flex; align-items: center; gap: 8px; margin-top: 4px;">
+                                            <span id="settingsValEmail" style="font-size: 14px; color: #fff;">****************@gmail.com</span>
+                                            <span id="toggleSettingsEmailBtn" style="font-size: 12px; color: #00b0f4; cursor: pointer; user-select: none;">Показать</span>
+                                        </div>
+                                    </div>
+                                    <button class="settings-change-btn" data-field="email" style="background: #4f545c; border: none; border-radius: 3px; color: #fff; padding: 6px 16px; font-size: 13px; font-weight: 500; cursor: pointer; transition: background 0.2s;">Изменить</button>
+                                </div>
+
+                                <!-- Field: Phone -->
+                                <div style="display: flex; justify-content: space-between; align-items: center;">
+                                    <div>
+                                        <div style="font-size: 11px; font-weight: 700; color: #b5bac1; text-transform: uppercase;">Номер телефона</div>
+                                        <div style="display: flex; align-items: center; gap: 8px; margin-top: 4px;">
+                                            <span id="settingsValPhone" style="font-size: 14px; color: #fff;">*********1436</span>
+                                            <span id="toggleSettingsPhoneBtn" style="font-size: 12px; color: #00b0f4; cursor: pointer; user-select: none;">Показать</span>
+                                        </div>
+                                    </div>
+                                    <div style="display: flex; gap: 10px;">
+                                        <button id="deleteSettingsPhoneBtn" style="background: transparent; border: none; color: #fa777c; font-size: 13px; font-weight: 500; cursor: pointer; padding: 0 10px;">Удалить</button>
+                                        <button class="settings-change-btn" data-field="phone" style="background: #4f545c; border: none; border-radius: 3px; color: #fff; padding: 6px 16px; font-size: 13px; font-weight: 500; cursor: pointer; transition: background 0.2s;">Изменить</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Password and Auth -->
+                    <div style="background: rgba(15, 18, 22, 0.45); border-radius: 8px; padding: 20px; border: 1px solid rgba(255,255,255,0.05);">
+                        <h3 style="font-size: 16px; font-weight: 700; color: #fff; margin: 0 0 10px 0;">Пароль и аутентификация</h3>
+                        <p style="font-size: 13px; color: #949ba4; line-height: 1.4; margin-bottom: 20px;">Настройте параметры безопасности вашей учетной записи.</p>
+                        <button id="settingsChangePassBtn" style="background: #5865f2; border: none; border-radius: 3px; color: #fff; padding: 10px 20px; font-size: 13px; font-weight: 500; cursor: pointer; transition: background 0.2s;">Сменить пароль</button>
+                    </div>
+                </div>
+
+                <!-- Fallback / Mock Sections -->
+                <div id="sectionMockSettings" class="settings-content-section" style="display: none; justify-content: center; align-items: center; flex: 1; flex-direction: column; text-align: center; gap: 15px;">
+                    <span class="material-symbols-outlined" style="font-size: 64px; color: #5865f2; opacity: 0.8;">settings</span>
+                    <h3 id="mockSectionTitle" style="font-size: 18px; font-weight: 700; color: #fff; margin: 0;">Настройка</h3>
+                    <p style="font-size: 14px; color: #949ba4; max-width: 400px; margin: 0;">Этот раздел настроек доступен в Premium сборке. Вы можете настроить основные параметры в разделе "Моя учётная запись".</p>
+                </div>
+
+            </div>
+
+            <!-- Absolute Close Button in Top Right -->
+            <div style="position: absolute; right: 40px; top: 40px; display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer; z-index: 10;" id="closeDiscordSettingsBtn">
+                <div style="width: 36px; height: 36px; border-radius: 50%; border: 2px solid rgba(255, 255, 255, 0.4); display: flex; align-items: center; justify-content: center; transition: border-color 0.2s, background 0.2s;">
+                    <span class="material-symbols-outlined" style="font-size: 18px; color: #fff;">close</span>
+                </div>
+                <span style="font-size: 12px; font-weight: 700; color: rgba(255,255,255,0.4); text-transform: uppercase; letter-spacing: 0.5px;">ESC</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Specific Setting Sub-Modal -->
+    <div class="search-modal-overlay" id="settingsEditModal" style="display: none; justify-content: center; align-items: center; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.65); z-index: 21000;">
+        <div class="search-modal-content glass-panel" style="background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(40px); border: 1px solid rgba(255, 255, 255, 0.08); width: 100%; max-width: 440px; border-radius: 8px;">
+            <div class="search-modal-header" style="background: transparent; border-bottom: 1px solid rgba(255, 255, 255, 0.05); padding: 20px;">
+                <h3 id="settingsEditModalTitle" style="margin: 0; color: #fff; font-size: 18px; font-weight: 700;">Изменить параметр</h3>
+            </div>
+            <div style="padding: 20px;">
+                <div class="input-wrapper" style="display: flex; flex-direction: column;">
+                    <label id="settingsEditModalLabel" style="display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; color: #b5bac1; margin-bottom: 8px; letter-spacing: 0.5px;">Новое значение</label>
+                    <input type="text" id="settingsEditModalInput" style="width: 100%; background: rgba(0, 0, 0, 0.3); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 8px; padding: 12px 15px; color: #fff; font-size: 15px; outline: none; box-sizing: border-box;" autocomplete="off">
+                </div>
+            </div>
+            <div class="search-modal-footer" style="background: rgba(0, 0, 0, 0.2); border-top: 1px solid rgba(255, 255, 255, 0.05); display: flex; justify-content: flex-end; gap: 12px; padding: 16px 20px;">
+                <button id="closeSettingsEditModalBtn" style="background: transparent; border: none; color: #fff; cursor: pointer; padding: 10px 20px; font-size: 14px; font-weight: 500; font-family: inherit;">Отмена</button>
+                <button id="submitSettingsEditModalBtn" style="background: #248046; border: none; border-radius: 4px; color: #fff; cursor: pointer; padding: 10px 20px; font-size: 14px; font-weight: 500; font-family: inherit; transition: background 0.2s;">Сохранить</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Cropper.js JS -->
     <script src="https://cdn.jsdelivr.net/npm/cropperjs@1.5.13/dist/cropper.min.js"></script>
-    <script type="module" src="script.js?v=24"></script>
+
+    <!-- Message Context Menu -->
+    <div id="messageContextMenu" style="display:none;">
+        <div class="msg-ctx-item" id="msgCtxEdit">
+            <span class="material-symbols-outlined">edit</span>
+            Редактировать
+        </div>
+        <div class="msg-ctx-item" id="msgCtxReply">
+            <span class="material-symbols-outlined">reply</span>
+            Ответить
+        </div>
+        <div class="msg-ctx-separator"></div>
+        <div class="msg-ctx-item" id="msgCtxCopy">
+            <span class="material-symbols-outlined">content_copy</span>
+            Скопировать текст
+        </div>
+        <div class="msg-ctx-separator"></div>
+        <div class="msg-ctx-item danger" id="msgCtxDelete">
+            <span class="material-symbols-outlined">delete</span>
+            Удалить сообщение
+        </div>
+    </div>
+
+    <!-- Channel Context Menu -->
+    <div id="channelContextMenu" style="display:none;">
+        <div class="ch-ctx-item" id="chCtxMute">
+            <span class="material-symbols-outlined">volume_off</span>
+            Заглушить канал
+        </div>
+    </div>
+
+    <script type="module" src="script.js?v=27"></script>
 </body>
 </html>

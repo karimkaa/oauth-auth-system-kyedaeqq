@@ -763,21 +763,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function loadProfileUI(data) {
         currentUserEmail = data.email;
-        document.getElementById('profileWelcome').textContent = `Привет, ${data.name}!`;
-        if (data.avatar) {
-            document.getElementById('profAvatar').value = data.avatar;
-            document.getElementById('avatarPreview').innerHTML = `<img src="${data.avatar}" alt="Avatar">`;
-        }
-        if (data.phone) document.getElementById('profPhone').value = data.phone;
-        if (data.bio)   document.getElementById('profBio').value   = data.bio;
-        document.getElementById('profEmail').value = data.email || '';
-        document.getElementById('profName').value = data.name || '';
-        document.getElementById('profBirthdate').value = data.birthdate || '';
+        currentUserProfileData = data;
         
         // Enter messenger
         initAppInterface(data);
         
-        showSection(profileSection, 'Ваш профиль | Premium Project');
+        populateSettingsUI();
+        document.title = 'Messenger | Premium Project';
+        clearMessages();
     }
 
     // --- Avatar Logic ---
@@ -851,8 +844,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 const r = await fetch(`${API_URL}/upload_avatar`, { method: 'POST', body: formData });
                 const d = await r.json();
                 if (r.ok) {
-                    document.getElementById('profAvatar').value = d.avatar_url;
-                    document.getElementById('avatarPreview').innerHTML = `<img src="${d.avatar_url}" alt="Avatar">`;
+                    await fetch(`${API_URL}/update_profile`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ email: currentUserEmail, avatar: d.avatar_url })
+                    });
+                    currentUserProfileData.avatar = d.avatar_url;
+                    populateSettingsUI();
+                    document.getElementById('miniAvatar').innerHTML = `<img src="${d.avatar_url}">`;
                     showMessage('Аватарка обновлена!', 'success');
                 } else {
                     showMessage(d.error || 'Ошибка загрузки', 'error');
@@ -879,6 +878,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const chatHistory  = document.getElementById('chatHistory');
     const chatInput    = document.getElementById('chatInput');
     const sendMsgBtn   = document.getElementById('sendMsgBtn');
+    const attachmentInput = document.getElementById('attachmentInput');
+    const uploadAttachmentBtn = document.getElementById('uploadAttachmentBtn');
     
     // Search Modal Elements
     const searchModal       = document.getElementById('searchModal');
@@ -908,6 +909,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         fetchActiveContacts();
         fetchAllUsers(); // For search cache
+        fetchServers();
     }
 
     async function fetchActiveContacts() {
@@ -972,6 +974,14 @@ document.addEventListener('DOMContentLoaded', () => {
         userSearchInput.focus();
     });
 
+    const openSearchBtnPlus = document.getElementById('openSearchBtnPlus');
+    if (openSearchBtnPlus) {
+        openSearchBtnPlus.addEventListener('click', () => {
+            searchModal.classList.add('active');
+            userSearchInput.focus();
+        });
+    }
+
     searchModal.addEventListener('click', (e) => {
         if (e.target === searchModal) searchModal.classList.remove('active');
     });
@@ -1032,24 +1042,41 @@ document.addEventListener('DOMContentLoaded', () => {
         fetchActiveContacts(); 
     };
 
+    let currentServerId = null;
+    let currentChannelId = null;
+    let serversList = [];
+
     window.selectChat = function(email, name, avatar) {
         currentRecipient = email;
+        currentChannelId = null;
         document.getElementById('chatWelcome').style.display = 'none';
         document.getElementById('activeChat').style.display = 'flex';
         document.getElementById('activeName').textContent = name;
-        document.getElementById('activeAvatar').innerHTML = avatar ? `<img src="${avatar}">` : '';
+        document.getElementById('activeAvatar').innerHTML = avatar ? `<img src="${avatar}">` : `<span class="material-symbols-outlined" style="color: #949ba4;">person</span>`;
+        chatInput.placeholder = `Написать ${name}`;
+
+        const membersSidebar = document.getElementById('membersSidebar');
+        if (membersSidebar) membersSidebar.style.display = 'none';
 
         chatHistory.innerHTML = '<div class="contacts-placeholder">Загрузка сообщений...</div>';
         fetchPrivateMessages();
 
         if (chatPollInterval) clearInterval(chatPollInterval);
-        chatPollInterval = setInterval(fetchPrivateMessages, 2000);
+        chatPollInterval = setInterval(pollMessages, 2000);
         
         document.querySelectorAll('.contact-item').forEach(item => {
             item.classList.remove('active');
-            if (item.querySelector('.contact-name').textContent === name) item.classList.add('active');
+            if (item.getAttribute('data-email') === email) item.classList.add('active');
         });
     };
+
+    function pollMessages() {
+        if (currentChannelId) {
+            fetchChannelMessages();
+        } else if (currentRecipient) {
+            fetchPrivateMessages();
+        }
+    }
 
     async function fetchPrivateMessages() {
         if (!currentRecipient) return;
@@ -1057,7 +1084,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const r = await fetch(`${API_URL}/get_messages?sender_email=${currentUserEmail}&recipient_email=${currentRecipient}`);
             const msgs = await r.json();
             if (r.ok) {
-                renderPrivateMessages(msgs);
+                renderMessages(msgs, false);
             } else {
                 console.error('Server error fetching msgs:', msgs.error);
                 chatHistory.innerHTML = '<div class="contacts-placeholder" style="color: #ef4444;">Ошибка сервера: ' + (msgs.error || 'неизвестно') + '</div>';
@@ -1068,101 +1095,1668 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    function renderPrivateMessages(msgs) {
+    async function fetchChannelMessages() {
+        if (!currentChannelId) return;
+        try {
+            const r = await fetch(`${API_URL}/api/channels/${currentChannelId}/messages`);
+            const msgs = await r.json();
+            if (r.ok) {
+                renderMessages(msgs, true);
+            } else {
+                console.error('Server error fetching channel msgs:', msgs.error);
+                chatHistory.innerHTML = '<div class="contacts-placeholder" style="color: #ef4444;">Ошибка сервера: ' + (msgs.error || 'неизвестно') + '</div>';
+            }
+        } catch (e) {
+            console.error('Fetch channel msgs error:', e);
+            chatHistory.innerHTML = '<div class="contacts-placeholder" style="color: #ef4444;">Сетевая ошибка</div>';
+        }
+    }
+
+    function renderMessages(msgs, isServerChannel) {
         if (msgs.length === 0) {
             chatHistory.innerHTML = `
                 <div class="empty-history-notice">
-                    <span class="material-symbols-outlined">chat_bubble_outline</span>
+                    <span class="material-symbols-outlined">forum</span>
                     <p>Чат пустой, начните общение!</p>
                 </div>
             `;
             return;
         }
 
-        chatHistory.innerHTML = msgs.map(m => {
-            // Format time
+        const selfName = document.getElementById('miniName').textContent || 'Вы';
+        const selfAvatar = document.getElementById('miniAvatar').querySelector('img')?.src || '';
+        const recipientName = document.getElementById('activeName').textContent || 'Собеседник';
+        const recipientAvatar = document.getElementById('activeAvatar').querySelector('img')?.src || '';
+
+        let html = '';
+        let lastSender = null;
+        let lastTime = null;
+
+        window.viewPhoto = function(src) {
+            document.getElementById('fullSizePhoto').src = src;
+            document.getElementById('photoViewerModal').classList.add('active');
+        };
+
+        msgs.forEach(m => {
             const date = new Date(m.time + 'Z');
             const timeStr = date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-            return `
-            <div class="message ${m.sender === currentUserEmail ? 'sent' : 'received'}">
-                <span class="sender">${m.sender === currentUserEmail ? 'Вы' : ''}</span>
-                ${m.text}
-                <span class="timestamp" style="font-size: 0.7em; opacity: 0.7; margin-left: 8px; display: inline-block;">${timeStr}</span>
-            </div>
-        `}).join('');
+            
+            // Parse time difference
+            const diff = lastTime ? (date.getTime() - lastTime.getTime()) : Infinity;
+            
+            const isSelf = (m.sender === currentUserEmail);
+            const senderName = isServerChannel ? (m.sender_name || m.sender.split('@')[0]) : (isSelf ? selfName : recipientName);
+            const senderAvatarImg = isServerChannel ? m.sender_avatar : (isSelf ? selfAvatar : recipientAvatar);
+
+            // Attachment rendering logic
+            let attachmentHTML = '';
+            if (m.attachment) {
+                const isImg = /\.(png|jpg|jpeg|webp|gif)$/i.test(m.attachment);
+                if (isImg) {
+                    attachmentHTML = `
+                    <div class="message-attachment" style="margin-top: 8px; max-width: 400px; border-radius: 8px; overflow: hidden; border: 1px solid rgba(255,255,255,0.1);">
+                        <img src="${m.attachment}" style="max-width: 100%; max-height: 300px; object-fit: contain; cursor: pointer; display: block;" onclick="viewPhoto('${m.attachment}')">
+                    </div>
+                    `;
+                } else {
+                    const parts = m.attachment.split('/');
+                    const filename = parts[parts.length - 1];
+                    attachmentHTML = `
+                    <div class="message-attachment" style="margin-top: 8px; display: inline-flex; align-items: center; gap: 8px; background: rgba(0,0,0,0.2); padding: 8px 12px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.05);">
+                        <span class="material-symbols-outlined" style="color: #949ba4;">insert_drive_file</span>
+                        <a href="${m.attachment}" target="_blank" style="color: #00b0f4; text-decoration: none; font-size: 14px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 250px;">${filename}</a>
+                        <span style="font-size: 11px; color: #949ba4; margin-left: 8px;">(Вложение)</span>
+                    </div>
+                    `;
+                }
+            }
+
+            // Grouping logic: same sender and within 5 minutes and not a reply
+            if (lastSender === m.sender && diff < 5 * 60 * 1000 && !m.parent_id) {
+                html += `
+                <div class="discord-message grouped-message" data-msg-id="${m.id || ''}" data-sender="${m.sender}" style="margin-top: 0; margin-bottom: 0; padding-top: 2px; padding-bottom: 2px; position: relative;">
+                    <div class="discord-message-hover-area" style="position: absolute; left: 0; width: 56px; display: flex; justify-content: flex-end; padding-right: 12px; box-sizing: border-box;">
+                        <span class="discord-message-hover-timestamp" style="font-size: 10px; color: #949ba4; opacity: 0; pointer-events: none; transition: opacity 0.1s; margin-top: 3px;">${timeStr}</span>
+                    </div>
+                    <div class="discord-message-content" style="padding-left: 56px; width: 100%;">
+                        <div class="discord-message-text">${m.text}</div>
+                        ${attachmentHTML}
+                        <div class="message-edit-area"></div>
+                    </div>
+                </div>
+                `;
+            } else {
+                let replyHTML = '';
+                if (m.parent_id) {
+                    const parentMsg = msgs.find(pm => pm.id === m.parent_id);
+                    if (parentMsg) {
+                        const parentSenderName = isServerChannel 
+                            ? (parentMsg.sender_name || parentMsg.sender.split('@')[0]) 
+                            : (parentMsg.sender === currentUserEmail ? selfName : recipientName);
+                        
+                        replyHTML = `
+                        <div class="discord-message-reply-preview" style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: #b5bac1; padding-left: 56px; margin-bottom: 4px; cursor: pointer; opacity: 0.8; user-select: none;" onclick="scrollToMessage(${m.parent_id})">
+                            <span class="material-symbols-outlined" style="font-size: 14px; transform: scaleX(-1); color: #b5bac1; vertical-align: middle; line-height: 1;">reply</span>
+                            <span style="font-weight: 600; color: #f2f3f5;">@${parentSenderName}</span>
+                            <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 250px; color: #949ba4;">${parentMsg.text}</span>
+                        </div>
+                        `;
+                    }
+                }
+                
+                html += `
+                <div class="discord-message-container" style="display: flex; flex-direction: column; width: 100%;">
+                    ${replyHTML}
+                    <div class="discord-message" data-msg-id="${m.id || ''}" data-sender="${m.sender}" style="position: relative;">
+                        <div class="discord-message-avatar">
+                            ${senderAvatarImg ? `<img src="${senderAvatarImg}">` : '<span class="material-symbols-outlined" style="color: #949ba4; font-size: 24px;">person</span>'}
+                        </div>
+                        <div class="discord-message-content">
+                            <div class="discord-message-header">
+                                <span class="discord-message-author">${senderName}</span>
+                                <span class="discord-message-timestamp">${timeStr}</span>
+                            </div>
+                            <div class="discord-message-text">${m.text}</div>
+                            ${attachmentHTML}
+                            <div class="message-edit-area"></div>
+                        </div>
+                    </div>
+                </div>
+                `;
+            }
+
+            lastSender = m.sender;
+            lastTime = date;
+        });
+
+        chatHistory.innerHTML = html;
         chatHistory.scrollTop = chatHistory.scrollHeight;
     }
 
-    async function sendPrivateMessage() {
-        const text = chatInput.value.trim();
-        if (!text || !currentRecipient) return;
-        try {
-            const r = await fetch(`${API_URL}/send_message`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ sender_email: currentUserEmail, recipient_email: currentRecipient, text: text })
-            });
-            if (r.ok) {
-                chatInput.value = '';
-                fetchPrivateMessages();
-                // Update sidebar on first message
-                fetchActiveContacts(); 
-            }
-        } catch (e) { console.error('Send error:', e); }
+    window.scrollToMessage = function(msgId) {
+        const el = document.querySelector(`.discord-message[data-msg-id="${msgId}"]`);
+        if (el) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            el.style.transition = 'background-color 0.2s';
+            el.style.backgroundColor = 'rgba(88, 101, 242, 0.2)';
+            setTimeout(() => {
+                el.style.transition = 'background-color 1s ease';
+                el.style.backgroundColor = 'transparent';
+            }, 1500);
+        }
+    };
+
+    async function sendMessage(customText = null, attachmentUrl = null) {
+        const text = (customText !== null) ? customText : chatInput.value.trim();
+        if (!text && !attachmentUrl) return;
+        
+        const parent_id = replyToData ? replyToData.id : null;
+        
+        if (currentChannelId) {
+            try {
+                const r = await fetch(`${API_URL}/api/channels/${currentChannelId}/messages`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        sender_email: currentUserEmail, 
+                        text: text, 
+                        parent_id: parent_id,
+                        attachment: attachmentUrl
+                    })
+                });
+                if (r.ok) {
+                    if (customText === null) chatInput.value = '';
+                    if (replyBar) replyBar.classList.remove('active');
+                    replyToData = null;
+                    fetchChannelMessages();
+                }
+            } catch (e) { console.error('Send channel message error:', e); }
+        } else if (currentRecipient) {
+            try {
+                const r = await fetch(`${API_URL}/send_message`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        sender_email: currentUserEmail, 
+                        recipient_email: currentRecipient, 
+                        text: text, 
+                        parent_id: parent_id,
+                        attachment: attachmentUrl
+                    })
+                });
+                if (r.ok) {
+                    if (customText === null) chatInput.value = '';
+                    if (replyBar) replyBar.classList.remove('active');
+                    replyToData = null;
+                    fetchPrivateMessages();
+                    fetchActiveContacts(); 
+                }
+            } catch (e) { console.error('Send message error:', e); }
+        }
     }
 
-    sendMsgBtn.addEventListener('click', sendPrivateMessage);
-    chatInput.addEventListener('keypress', e => { if (e.key === 'Enter') sendPrivateMessage(); });
-    document.getElementById('openSettings').addEventListener('click', () => {
-        setQuality(false); // Reset quality
-        appInterface.classList.remove('active');
-        
-        // Make sure container is visible and smooth
-        const containerUI = document.querySelector('.container');
-        if (containerUI) {
-            containerUI.style.opacity = '1';
-            containerUI.style.visibility = 'visible';
-            containerUI.style.pointerEvents = 'auto';
-        }
-        
-        showSection(profileSection, 'Настройки профиля | Premium Project');
+    sendMsgBtn.addEventListener('click', () => sendMessage());
+    chatInput.addEventListener('keypress', e => { if (e.key === 'Enter') sendMessage(); });
+
+    // --- Attachment Upload Logic ---
+    uploadAttachmentBtn.addEventListener('click', () => {
+        attachmentInput.click();
     });
 
-    document.getElementById('closeSettingsBtn').addEventListener('click', () => {
-        const containerUI = document.querySelector('.container');
-        if (containerUI) {
-            containerUI.style.opacity = '0';
-            containerUI.style.pointerEvents = 'none';
+    attachmentInput.addEventListener('change', async () => {
+        const file = attachmentInput.files[0];
+        if (!file) return;
+
+        const formData = new FormData();
+        formData.append('file', file);
+
+        try {
+            const uploadResponse = await fetch(`${API_URL}/api/upload_attachment`, {
+                method: 'POST',
+                body: formData
+            });
+            const uploadResult = await uploadResponse.json();
+            if (uploadResponse.ok) {
+                const fileUrl = uploadResult.file_url;
+                const filename = uploadResult.filename;
+
+                // Send the message with attachment
+                await sendMessage(filename, fileUrl);
+                attachmentInput.value = ''; // reset input
+            } else {
+                alert('Ошибка загрузки файла: ' + (uploadResult.error || 'неизвестно'));
+            }
+        } catch (e) {
+            console.error('File upload error:', e);
+            alert('Сетевая ошибка при загрузке файла');
         }
-        setTimeout(() => {
-            appInterface.classList.add('active');
-        }, 400);
+    });
+
+    // --- Servers and Channels switching logic ---
+
+    // Define mock members globally
+    const mockMembersPool = {
+        'Google DeepMind': [
+            { name: 'Demis Hassabis', role: 'Основатели', status: 'online', statusText: 'Playing Chess with AI', avatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=Demis' },
+            { name: 'Shane Legg', role: 'Основатели', status: 'dnd', statusText: 'AGI is near', avatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=Shane' },
+            { name: 'Sundar Pichai', role: 'Руководство', status: 'online', statusText: 'AI first company', avatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=Sundar' },
+            { name: 'Geoffrey Hinton', role: 'Исследователи', status: 'offline', statusText: 'Godfather of AI', avatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=Geoffrey' },
+            { name: 'Yann LeCun', role: 'Исследователи', status: 'online', statusText: 'Autoregressive models suck', avatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=Yann' },
+            { name: 'Yoshua Bengio', role: 'Исследователи', status: 'idle', statusText: 'AI safety advocate', avatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=Yoshua' }
+        ],
+        'Python Developers': [
+            { name: 'Guido van Rossum', role: 'Создатель Python', status: 'online', statusText: 'import antigravity', avatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=Guido' },
+            { name: 'Raymond Hettinger', role: 'Core Devs', status: 'dnd', statusText: 'There must be a better way', avatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=Raymond' },
+            { name: 'Carol Willing', role: 'Core Devs', status: 'online', statusText: 'Jupyter & Python', avatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=Carol' },
+            { name: 'Brett Cannon', role: 'Core Devs', status: 'offline', statusText: 'VS Code Python guy', avatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=Brett' }
+        ],
+        'Antigravity Workspace': [
+            { name: 'Antigravity Bot', role: 'Боты', status: 'online', statusText: 'Here to help you code!', avatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=Antigravity' },
+            { name: 'Gemini 1.5 Pro', role: 'ИИ Помощники', status: 'online', statusText: 'Google DeepMind model', avatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=Gemini' },
+            { name: 'Claude 3 Opus', role: 'ИИ Помощники', status: 'dnd', statusText: 'Constitutional AI', avatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=Claude' },
+            { name: 'GPT-4o', role: 'ИИ Помощники', status: 'online', statusText: 'Omni model', avatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=GPT' }
+        ]
+    };
+
+    // Helper to dynamically update the live stats inside server settings preview card
+    window.updateSettingsLiveStats = function(server) {
+        if (!server) return;
+        const members = mockMembersPool[server.name] || [];
+        const currentUserName = document.getElementById('miniName').textContent || currentUserEmail.split('@')[0];
+        const hasMe = members.some(m => m.name === currentUserName);
+        const total = members.length + (hasMe ? 0 : 1);
+        const online = members.filter(m => m.status !== 'offline').length + (hasMe ? 1 : 0);
+        
+        const onlineText = `${online} в сети`;
+        let totalText = `${total} участник`;
+        if (total > 1 && total < 5) {
+            totalText = `${total} участника`;
+        } else if (total >= 5 || total === 0) {
+            totalText = `${total} участников`;
+        }
+        
+        const onlineEl = document.getElementById('serverSettingsPreviewOnlineCount');
+        const totalEl = document.getElementById('serverSettingsPreviewTotalCount');
+        if (onlineEl) onlineEl.textContent = onlineText;
+        if (totalEl) totalEl.textContent = totalText;
+    };
+
+    // Background simulation of members' online/offline statuses
+    setInterval(() => {
+        if (!currentServerId) return;
+        const currentServer = serversList.find(s => s.id === currentServerId);
+        if (!currentServer) return;
+        
+        const members = mockMembersPool[currentServer.name];
+        if (!members || members.length === 0) return;
+        
+        const currentUserName = document.getElementById('miniName').textContent || currentUserEmail.split('@')[0];
+        const candidates = members.filter(m => m.name !== currentUserName);
+        if (candidates.length === 0) return;
+        
+        const randomMember = candidates[Math.floor(Math.random() * candidates.length)];
+        const statuses = ['online', 'dnd', 'idle', 'offline'];
+        const newStatus = statuses[Math.floor(Math.random() * statuses.length)];
+        randomMember.status = newStatus;
+        
+        if (newStatus === 'offline') {
+            randomMember.statusText = '';
+        } else {
+            const activities = ['Пишет код', 'Изучает ИИ', 'Смотрит мемы', 'Анализирует данные', 'Общается в чате'];
+            randomMember.statusText = activities[Math.floor(Math.random() * activities.length)];
+        }
+        
+        const membersSidebar = document.getElementById('membersSidebar');
+        if (membersSidebar && membersSidebar.style.display !== 'none') {
+            updateMembersSidebar(currentServer);
+        }
+        updateSettingsLiveStats(currentServer);
+    }, 8000);
+
+    function updateMembersSidebar(server) {
+        const sidebar = document.getElementById('membersSidebar');
+        if (!sidebar) return;
+
+        if (!mockMembersPool[server.name]) {
+            mockMembersPool[server.name] = [
+                { name: server.owner_email.split('@')[0], role: 'Создатель сервера', status: 'online', statusText: 'Владелец сервера', avatar: `https://api.dicebear.com/7.x/bottts/svg?seed=${server.owner_email}` },
+                { name: 'Yann LeCun', role: 'Участники', status: 'online', statusText: 'AI developer', avatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=Yann' },
+                { name: 'Sundar Pichai', role: 'Участники', status: 'idle', statusText: 'Looking around', avatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=Sundar' }
+            ];
+        }
+
+        let list = [...mockMembersPool[server.name]];
+
+        const currentUserName = document.getElementById('miniName').textContent || currentUserEmail.split('@')[0];
+        const currentUserAvatar = document.getElementById('miniAvatar').querySelector('img')?.src || '';
+        
+        if (!list.some(m => m.name === currentUserName)) {
+            list.push({
+                name: currentUserName,
+                role: 'Участники',
+                status: 'online',
+                statusText: 'В сети',
+                avatar: currentUserAvatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${currentUserEmail}`
+            });
+        }
+
+        const groups = {};
+        list.forEach(m => {
+            if (!groups[m.role]) groups[m.role] = [];
+            groups[m.role].push(m);
+        });
+
+        let html = '';
+        const onlineCount = list.filter(m => m.status !== 'offline').length;
+        
+        html += `
+            <div style="font-size: 11px; font-weight: 700; color: #949ba4; text-transform: uppercase; letter-spacing: 0.5px; padding-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.05); margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between;">
+                <span>В сети — ${onlineCount}</span>
+            </div>
+        `;
+
+        Object.keys(groups).forEach(roleName => {
+            const roleMembers = groups[roleName];
+            html += `<div class="member-role-title">${roleName} — ${roleMembers.length}</div>`;
+            
+            roleMembers.forEach(m => {
+                const avatarContent = m.avatar ? `<img src="${m.avatar}" class="member-avatar-img">` : '<span class="material-symbols-outlined" style="color: #949ba4; font-size: 20px;">person</span>';
+                
+                html += `
+                    <div class="member-item" title="${m.name} - ${m.statusText || ''}">
+                        <div class="member-avatar-wrapper">
+                            ${avatarContent}
+                            <div class="member-status-dot ${m.status}"></div>
+                        </div>
+                        <div class="member-info">
+                            <div class="member-name">${m.name}</div>
+                            <div class="member-custom-status">${m.statusText || ''}</div>
+                        </div>
+                    </div>
+                `;
+            });
+        });
+
+        sidebar.innerHTML = html;
+    }
+
+    window.selectChannel = function(channelId, channelName) {
+        currentChannelId = channelId;
+        currentRecipient = null;
+        
+        document.getElementById('chatWelcome').style.display = 'none';
+        document.getElementById('activeChat').style.display = 'flex';
+        document.getElementById('activeName').textContent = `# ${channelName}`;
+        document.getElementById('activeAvatar').innerHTML = `<span class="material-symbols-outlined" style="color: #949ba4;">tag</span>`;
+        chatInput.placeholder = `Написать в #${channelName}`;
+
+        const membersSidebar = document.getElementById('membersSidebar');
+        if (membersSidebar) {
+            membersSidebar.style.display = 'flex';
+            const srv = serversList.find(s => s.id === currentServerId);
+            if (srv) {
+                updateMembersSidebar(srv);
+            }
+        }
+
+        chatHistory.innerHTML = '<div class="contacts-placeholder">Загрузка сообщений...</div>';
+        fetchChannelMessages();
+
+        if (chatPollInterval) clearInterval(chatPollInterval);
+        chatPollInterval = setInterval(pollMessages, 2000);
+        
+        document.querySelectorAll('.channel-item').forEach(item => {
+            item.classList.remove('active');
+            if (parseInt(item.getAttribute('data-id')) === channelId) item.classList.add('active');
+        });
+    };
+
+    function renderServerChannels(channels) {
+        const channelsList = document.getElementById('channelsList');
+        if (!channels || channels.length === 0) {
+            channelsList.innerHTML = '<div class="contacts-placeholder">Нет каналов</div>';
+            return;
+        }
+        
+        channelsList.innerHTML = channels.map(ch => `
+            <div class="contact-item channel-item" data-id="${ch.id}" onclick="selectChannel(${ch.id}, '${ch.name}')" style="gap: 8px;">
+                <span class="material-symbols-outlined" style="font-size: 20px; color: #949ba4;">tag</span>
+                <span class="contact-name" style="font-size: 14px;">${ch.name}</span>
+            </div>
+        `).join('');
+    }
+
+    window.selectServer = function(serverId, serverName, channels) {
+        currentServerId = serverId;
+        currentRecipient = null;
+        
+        // Hide DMs view elements, show server channels list
+        document.querySelector('.sidebar-nav').style.display = 'none';
+        document.querySelector('.dm-header').style.display = 'none';
+        document.getElementById('contactsList').style.display = 'none';
+        
+        document.getElementById('serverChannelsContainer').style.display = 'flex';
+        document.getElementById('serverSidebarName').textContent = serverName;
+        
+        document.querySelectorAll('.guild-item').forEach(item => {
+            item.classList.remove('active');
+            if (parseInt(item.getAttribute('data-id')) === serverId) item.classList.add('active');
+        });
+        
+        renderServerChannels(channels);
+        
+        if (channels && channels.length > 0) {
+            selectChannel(channels[0].id, channels[0].name);
+        } else {
+            document.getElementById('chatWelcome').style.display = 'flex';
+            document.getElementById('activeChat').style.display = 'none';
+            currentChannelId = null;
+        }
+    };
+
+    document.getElementById('dmGuildBtn').addEventListener('click', () => {
+        currentServerId = null;
+        currentChannelId = null;
+        currentRecipient = null;
+        
+        document.querySelector('.sidebar-nav').style.display = 'flex';
+        document.querySelector('.dm-header').style.display = 'flex';
+        document.getElementById('contactsList').style.display = 'block';
+        document.getElementById('serverChannelsContainer').style.display = 'none';
+        
+        document.querySelectorAll('.guild-item').forEach(item => {
+            item.classList.remove('active');
+        });
+        document.getElementById('dmGuildBtn').classList.add('active');
+        
+        document.getElementById('chatWelcome').style.display = 'flex';
+        document.getElementById('activeChat').style.display = 'none';
+        
+        if (chatPollInterval) clearInterval(chatPollInterval);
+    });
+
+    async function fetchServers() {
+        try {
+            const r = await fetch(`${API_URL}/api/servers`);
+            const data = await r.json();
+            if (r.ok) {
+                serversList = data;
+                renderServersList(data);
+            }
+        } catch (e) {
+            console.error('Error fetching servers:', e);
+        }
+    }
+
+    let contextServerId = null;
+
+    function renderServersList(servers) {
+        const container = document.getElementById('dynamicGuildsContainer');
+        container.innerHTML = servers.map(srv => {
+            const isImage = srv.icon && (srv.icon.startsWith('data:') || srv.icon.startsWith('http') || srv.icon.startsWith('/'));
+            const innerIcon = isImage 
+                ? `<img src="${srv.icon}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;">`
+                : srv.icon || srv.name.split(' ').map(w => w[0]).join('').substring(0, 3).toUpperCase();
+
+            return `
+            <div class="guild-item" data-id="${srv.id}" title="${srv.name}" onclick="handleServerClick(${srv.id})" oncontextmenu="handleServerContextMenu(event, ${srv.id})">
+                <div class="guild-icon ${isImage ? '' : 'text-icon'}" style="background-color: #5865f2; color: #fff; font-weight: bold; overflow: hidden; display: flex; align-items: center; justify-content: center;">${innerIcon}</div>
+                <div class="guild-indicator"></div>
+            </div>
+            `;
+        }).join('');
+    }
+
+    window.handleServerClick = function(serverId) {
+        const srv = serversList.find(s => s.id === serverId);
+        if (srv) {
+            selectServer(srv.id, srv.name, srv.channels);
+        }
+    };
+
+    window.handleServerContextMenu = function(e, serverId) {
+        e.preventDefault();
+        e.stopPropagation();
+        contextServerId = serverId;
+        const menu = document.getElementById('serverContextMenu');
+        if (menu) {
+            menu.style.display = 'block';
+            menu.style.left = `${e.pageX}px`;
+            menu.style.top = `${e.pageY}px`;
+        }
+    };
+
+    // Close context menu when clicking outside
+    document.addEventListener('click', () => {
+        const menu = document.getElementById('serverContextMenu');
+        if (menu) menu.style.display = 'none';
+    });
+
+    // Context Menu Action Listeners
+    const markReadBtn = document.getElementById('ctxMarkRead');
+    if (markReadBtn) {
+        markReadBtn.addEventListener('click', () => {
+            const srv = serversList.find(s => s.id === contextServerId);
+            if (srv) {
+                alert(`Сервер "${srv.name}" отмечен как прочитанный`);
+            }
+        });
+    }
+
+    const muteBtn = document.getElementById('ctxMute');
+    if (muteBtn) {
+        muteBtn.addEventListener('click', () => {
+            alert('Оповещения сервера настроены');
+        });
+    }
+
+    const inviteBtn = document.getElementById('ctxInvite');
+    const inviteServerModal = document.getElementById('inviteServerModal');
+    const inviteLinkInput = document.getElementById('inviteLinkInput');
+    const copyInviteLinkBtn = document.getElementById('copyInviteLinkBtn');
+    const closeInviteModalBtn = document.getElementById('closeInviteModalBtn');
+
+    if (inviteBtn) {
+        inviteBtn.addEventListener('click', () => {
+            const srv = serversList.find(s => s.id === contextServerId);
+            if (srv) {
+                document.getElementById('inviteServerName').textContent = `Поделитесь этой ссылкой с друзьями, чтобы они могли присоединиться к ${srv.name}!`;
+                inviteLinkInput.value = `${window.location.origin}/invite/${srv.id}`;
+                inviteServerModal.style.display = 'flex';
+            }
+        });
+    }
+
+    if (copyInviteLinkBtn) {
+        copyInviteLinkBtn.addEventListener('click', () => {
+            inviteLinkInput.select();
+            document.execCommand('copy');
+            const originalText = copyInviteLinkBtn.textContent;
+            copyInviteLinkBtn.textContent = 'Скопировано!';
+            copyInviteLinkBtn.style.background = '#43b581';
+            setTimeout(() => {
+                copyInviteLinkBtn.textContent = originalText;
+                copyInviteLinkBtn.style.background = '#5865f2';
+            }, 2000);
+        });
+    }
+
+    if (closeInviteModalBtn) {
+        closeInviteModalBtn.addEventListener('click', () => {
+            inviteServerModal.style.display = 'none';
+        });
+    }
+
+    if (inviteServerModal) {
+        inviteServerModal.addEventListener('click', (e) => {
+            if (e.target === inviteServerModal) {
+                inviteServerModal.style.display = 'none';
+            }
+        });
+    }
+
+    // Discord style Server Settings Modal
+    const settingsBtn = document.getElementById('ctxSettings');
+    const discordServerSettingsModal = document.getElementById('discordServerSettingsModal');
+    const serverSettingsNameInput = document.getElementById('serverSettingsNameInput');
+    const serverSettingsIconInput = document.getElementById('serverSettingsIconInput');
+    const serverSettingsSaveBtn = document.getElementById('serverSettingsSaveBtn');
+    const closeDiscordServerSettingsBtn = document.getElementById('closeDiscordServerSettingsBtn');
+    
+    // Server settings tab switching
+    const serverSettingsMenuItems = document.querySelectorAll('.server-settings-menu-item');
+    const sectionServerProfile = document.getElementById('sectionServerProfile');
+    const sectionServerMockSettings = document.getElementById('sectionServerMockSettings');
+    const serverSettingsPreviewCard = document.getElementById('serverSettingsPreviewCard');
+    const serverMockSectionTitle = document.getElementById('serverMockSectionTitle');
+
+    if (serverSettingsMenuItems) {
+        serverSettingsMenuItems.forEach(item => {
+            item.addEventListener('click', () => {
+                serverSettingsMenuItems.forEach(mi => mi.classList.remove('active'));
+                item.classList.add('active');
+                
+                const section = item.getAttribute('data-section');
+                if (section === 'profile') {
+                    sectionServerProfile.style.display = 'flex';
+                    sectionServerMockSettings.style.display = 'none';
+                    serverSettingsPreviewCard.style.display = 'block';
+                } else if (section === 'members') {
+                    sectionServerProfile.style.display = 'none';
+                    sectionServerMockSettings.style.display = 'flex';
+                    serverSettingsPreviewCard.style.display = 'none';
+                    serverMockSectionTitle.textContent = item.textContent;
+                    // Populate Server Members list in settings
+                    const srv = serversList.find(s => s.id === contextServerId);
+                    if (srv) {
+                        renderSettingsMembersList(srv);
+                    }
+                } else {
+                    sectionServerProfile.style.display = 'none';
+                    sectionServerMockSettings.style.display = 'flex';
+                    serverSettingsPreviewCard.style.display = 'none';
+                    serverMockSectionTitle.textContent = item.textContent;
+                }
+            });
+        });
+    }
+
+    function renderSettingsMembersList(server) {
+        // Base mock data for members
+        const mockMembersPool = {
+            'Google DeepMind': [
+                { name: 'Demis Hassabis', role: 'Основатели', status: 'online', statusText: 'Playing Chess with AI', avatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=Demis' },
+                { name: 'Shane Legg', role: 'Основатели', status: 'dnd', statusText: 'AGI is near', avatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=Shane' },
+                { name: 'Sundar Pichai', role: 'Руководство', status: 'online', statusText: 'AI first company', avatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=Sundar' },
+                { name: 'Geoffrey Hinton', role: 'Исследователи', status: 'offline', statusText: 'Godfather of AI', avatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=Geoffrey' },
+                { name: 'Yann LeCun', role: 'Исследователи', status: 'online', statusText: 'Autoregressive models suck', avatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=Yann' },
+                { name: 'Yoshua Bengio', role: 'Исследователи', status: 'idle', statusText: 'AI safety advocate', avatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=Yoshua' }
+            ],
+            'Python Developers': [
+                { name: 'Guido van Rossum', role: 'Создатель Python', status: 'online', statusText: 'import antigravity', avatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=Guido' },
+                { name: 'Raymond Hettinger', role: 'Core Devs', status: 'dnd', statusText: 'There must be a better way', avatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=Raymond' },
+                { name: 'Carol Willing', role: 'Core Devs', status: 'online', statusText: 'Jupyter & Python', avatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=Carol' },
+                { name: 'Brett Cannon', role: 'Core Devs', status: 'offline', statusText: 'VS Code Python guy', avatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=Brett' }
+            ],
+            'Antigravity Workspace': [
+                { name: 'Antigravity Bot', role: 'Боты', status: 'online', statusText: 'Here to help you code!', avatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=Antigravity' },
+                { name: 'Gemini 1.5 Pro', role: 'ИИ Помощники', status: 'online', statusText: 'Google DeepMind model', avatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=Gemini' },
+                { name: 'Claude 3 Opus', role: 'ИИ Помощники', status: 'dnd', statusText: 'Constitutional AI', avatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=Claude' },
+                { name: 'GPT-4o', role: 'ИИ Помощники', status: 'online', statusText: 'Omni model', avatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=GPT' }
+            ]
+        };
+
+        let list = [];
+        if (mockMembersPool[server.name]) {
+            list = [...mockMembersPool[server.name]];
+        } else {
+            list = [
+                { name: server.owner_email.split('@')[0], role: 'Создатель сервера', status: 'online', statusText: 'Владелец сервера', avatar: `https://api.dicebear.com/7.x/bottts/svg?seed=${server.owner_email}` },
+                { name: 'Yann LeCun', role: 'Участники', status: 'online', statusText: 'AI developer', avatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=Yann' },
+                { name: 'Sundar Pichai', role: 'Участники', status: 'idle', statusText: 'Looking around', avatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=Sundar' }
+            ];
+        }
+
+        const currentUserName = currentUserProfileData?.name || currentUserEmail.split('@')[0];
+        const currentUserAvatar = currentUserProfileData?.avatar || '';
+        if (!list.some(m => m.name === currentUserName)) {
+            list.push({
+                name: currentUserName,
+                role: 'Участники',
+                status: 'online',
+                statusText: 'В сети',
+                avatar: currentUserAvatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${currentUserEmail}`
+            });
+        }
+
+        let html = `
+            <div style="width: 100%; display: flex; flex-direction: column; gap: 15px; text-align: left; padding: 20px; box-sizing: border-box;">
+                <h3 style="font-size: 16px; font-weight: 700; color: #fff; margin: 0 0 10px 0;">Участники сервера (${list.length})</h3>
+                <div style="display: flex; flex-direction: column; gap: 10px;">
+        `;
+
+        list.forEach(m => {
+            const avatarContent = m.avatar ? `<img src="${m.avatar}" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover;">` : '<span class="material-symbols-outlined" style="color: #949ba4; font-size: 20px;">person</span>';
+            html += `
+                <div style="display: flex; align-items: center; justify-content: space-between; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.05); padding: 10px 15px; border-radius: 6px;">
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <div style="position: relative; width: 36px; height: 36px; border-radius: 50%; background: #2b2d31; display: flex; align-items: center; justify-content: center;">
+                            ${avatarContent}
+                            <div class="member-status-dot ${m.status}" style="width: 8px; height: 8px;"></div>
+                        </div>
+                        <div>
+                            <div style="font-size: 14px; font-weight: 600; color: #fff;">${m.name}</div>
+                            <div style="font-size: 12px; color: #949ba4;">${m.role} • ${m.statusText || ''}</div>
+                        </div>
+                    </div>
+                    <div>
+                        <button class="settings-change-btn" style="background: rgba(255,255,255,0.08); border: none; border-radius: 3px; color: #fff; padding: 6px 12px; font-size: 12px; cursor: pointer;">Действия</button>
+                    </div>
+                </div>
+            `;
+        });
+
+        html += `
+                </div>
+            </div>
+        `;
+        sectionServerMockSettings.innerHTML = html;
+    }
+
+    if (settingsBtn) {
+        settingsBtn.addEventListener('click', () => {
+            const srv = serversList.find(s => s.id === contextServerId);
+            if (srv) {
+                // Reset tab to Profile
+                serverSettingsMenuItems.forEach(mi => mi.classList.remove('active'));
+                const firstTab = document.querySelector('.server-settings-menu-item[data-section="profile"]');
+                if (firstTab) firstTab.classList.add('active');
+                
+                sectionServerProfile.style.display = 'flex';
+                sectionServerMockSettings.style.display = 'none';
+                serverSettingsPreviewCard.style.display = 'block';
+
+                document.getElementById('serverSettingsHeaderTitle').textContent = `СЕРВЕР: ${srv.name.toUpperCase()}`;
+                serverSettingsNameInput.value = srv.name;
+                
+                // Update Preview Card — reset session upload and render active icon type
+                serverSettingsIconDataUrl = null;
+                document.getElementById('serverSettingsPreviewName').textContent = srv.name;
+                const previewText = document.getElementById('serverSettingsPreviewIconText');
+                let previewImg = document.getElementById('serverSettingsPreviewIconImg');
+                const isImage = srv.icon && (srv.icon.startsWith('data:') || srv.icon.startsWith('http') || srv.icon.startsWith('/'));
+                
+                if (isImage) {
+                    if (!previewImg) {
+                        previewImg = document.createElement('img');
+                        previewImg.id = 'serverSettingsPreviewIconImg';
+                        previewImg.className = 'server-icon-img';
+                        previewImg.style.width = '100%';
+                        previewImg.style.height = '100%';
+                        previewImg.style.objectFit = 'cover';
+                        previewImg.style.borderRadius = '50%';
+                        const container = document.getElementById('serverSettingsPreviewIconContainer');
+                        if (container) container.appendChild(previewImg);
+                    }
+                    previewImg.src = srv.icon;
+                    previewImg.style.display = 'block';
+                    if (previewText) previewText.style.display = 'none';
+                } else {
+                    if (previewImg) previewImg.style.display = 'none';
+                    if (previewText) {
+                        previewText.style.display = 'block';
+                        const nameWords = srv.name.trim().split(/\s+/);
+                        const abbr = srv.icon || (nameWords.length >= 2
+                            ? (nameWords[0][0] + nameWords[1][0]).toUpperCase()
+                            : srv.name.substring(0, 2).toUpperCase());
+                        previewText.textContent = abbr;
+                    }
+                }
+                
+                discordServerSettingsModal.style.display = 'flex';
+            }
+        });
+    }
+
+    if (serverSettingsNameInput) {
+        serverSettingsNameInput.addEventListener('input', () => {
+            const name = serverSettingsNameInput.value.trim();
+            document.getElementById('serverSettingsPreviewName').textContent = name || 'Без имени';
+            const previewIconImg = document.getElementById('serverSettingsPreviewIconImg');
+            if (!previewIconImg || previewIconImg.style.display === 'none') {
+                // Auto-generate abbreviation from name words
+                const words = name.trim().split(/\s+/);
+                const abbr = words.length >= 2
+                    ? (words[0][0] + words[1][0]).toUpperCase()
+                    : name.substring(0, 2).toUpperCase();
+                document.getElementById('serverSettingsPreviewIconText').textContent = abbr;
+            }
+        });
+    }
+
+    const bannerOptions = document.querySelectorAll('.banner-color-option');
+    const previewBanner = document.getElementById('serverSettingsPreviewBanner');
+    if (bannerOptions && previewBanner) {
+        bannerOptions.forEach(opt => {
+            opt.addEventListener('click', () => {
+                bannerOptions.forEach(o => o.classList.remove('active'));
+                opt.classList.add('active');
+                const color = opt.getAttribute('data-color');
+                previewBanner.style.background = color;
+            });
+        });
+    }
+
+    if (closeDiscordServerSettingsBtn) {
+        closeDiscordServerSettingsBtn.addEventListener('click', () => {
+            discordServerSettingsModal.style.display = 'none';
+        });
+    }
+
+    // Escape key listener for server settings modal
+    window.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            if (discordServerSettingsModal && discordServerSettingsModal.style.display === 'flex') {
+                discordServerSettingsModal.style.display = 'none';
+            }
+        }
+    });
+
+    if (serverSettingsSaveBtn) {
+        serverSettingsSaveBtn.addEventListener('click', async () => {
+            const name = serverSettingsNameInput.value.trim();
+            // Auto-generate icon abbreviation from server name
+            const words = name.trim().split(/\s+/);
+            const icon = words.length >= 2
+                ? (words[0][0] + words[1][0]).toUpperCase()
+                : name.substring(0, 2).toUpperCase();
+            if (!name) return;
+            try {
+                const r = await fetch(`${API_URL}/api/servers/${contextServerId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, icon })
+                });
+                if (r.ok) {
+                    discordServerSettingsModal.style.display = 'none';
+                    fetchServers();
+                }
+            } catch (e) {
+                console.error('Update server error:', e);
+            }
+        });
+    }
+
+    const leaveBtn = document.getElementById('ctxLeave');
+    if (leaveBtn) {
+        leaveBtn.addEventListener('click', async () => {
+            const srv = serversList.find(s => s.id === contextServerId);
+            if (!srv) return;
+            const conf = confirm(`Вы уверены, что хотите покинуть сервер "${srv.name}"?`);
+            if (!conf) return;
+            try {
+                const r = await fetch(`${API_URL}/api/servers/${contextServerId}`, {
+                    method: 'DELETE'
+                });
+                if (r.ok) {
+                    fetchServers();
+                    // Click Direct Messages button to go home
+                    const dmBtn = document.getElementById('dmGuildBtn');
+                    if (dmBtn) dmBtn.click();
+                }
+            } catch (e) {
+                console.error('Leave server error:', e);
+            }
+        });
+    }
+
+    // Add Server Modal handlers — NEW Discord-style modal
+    const createServerModal = document.getElementById('createServerModal');
+    const addGuildBtn = document.getElementById('addGuildBtn');
+    const closeCreateServerBtn = document.getElementById('closeCreateServerBtn');
+    const cancelCreateServerBtn = document.getElementById('cancelCreateServerBtn');
+    const submitCreateServerBtn = document.getElementById('submitCreateServerBtn');
+    const serverNameInput = document.getElementById('serverNameInput');
+    const createServerIconArea = document.getElementById('createServerIconArea');
+    const createServerIconFile = document.getElementById('createServerIconFile');
+    const createServerIconPreview = document.getElementById('createServerIconPreview');
+    const createServerIconLabel = document.getElementById('createServerIconLabel');
+
+    // Uploaded icon data URL for create server
+    let createServerIconDataUrl = null;
+
+    function openCreateServerModal() {
+        if (createServerModal) {
+            createServerModal.classList.add('active');
+            if (serverNameInput) serverNameInput.focus();
+        }
+    }
+
+    function closeCreateServerModal() {
+        if (createServerModal) {
+            createServerModal.classList.remove('active');
+            if (serverNameInput) serverNameInput.value = '';
+            createServerIconDataUrl = null;
+            if (createServerIconPreview) { createServerIconPreview.style.display = 'none'; createServerIconPreview.src = ''; }
+            if (createServerIconLabel) createServerIconLabel.style.display = 'flex';
+        }
+    }
+
+    if (addGuildBtn) {
+        addGuildBtn.addEventListener('click', openCreateServerModal);
+    }
+    if (closeCreateServerBtn) closeCreateServerBtn.addEventListener('click', closeCreateServerModal);
+    if (cancelCreateServerBtn) cancelCreateServerBtn.addEventListener('click', closeCreateServerModal);
+
+    if (createServerModal) {
+        createServerModal.addEventListener('click', (e) => {
+            if (e.target === createServerModal) closeCreateServerModal();
+        });
+    }
+
+    // Server icon upload in create modal
+    if (createServerIconArea && createServerIconFile) {
+        createServerIconArea.addEventListener('click', () => createServerIconFile.click());
+        createServerIconFile.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+                createServerIconDataUrl = ev.target.result;
+                if (createServerIconPreview) {
+                    createServerIconPreview.src = ev.target.result;
+                    createServerIconPreview.style.display = 'block';
+                }
+                if (createServerIconLabel) createServerIconLabel.style.display = 'none';
+            };
+            reader.readAsDataURL(file);
+        });
+    }
+
+    if (submitCreateServerBtn) {
+        submitCreateServerBtn.addEventListener('click', async () => {
+            const name = serverNameInput ? serverNameInput.value.trim() : '';
+            if (!name) {
+                alert('Пожалуйста, введите название сервера');
+                return;
+            }
+            // Auto-generate abbreviation or use custom uploaded image data url
+            const words = name.trim().split(/\s+/);
+            const icon = createServerIconDataUrl || (words.length >= 2 
+                ? (words[0][0] + words[1][0]).toUpperCase() 
+                : name.substring(0, 2).toUpperCase());
+            try {
+                const r = await fetch(`${API_URL}/api/servers`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: name, owner_email: currentUserEmail, icon: icon })
+                });
+                if (r.ok) {
+                    closeCreateServerModal();
+                    fetchServers();
+                } else {
+                    const data = await r.json();
+                    alert('Ошибка: ' + (data.error || 'неизвестно'));
+                }
+            } catch (e) {
+                console.error('Create server error:', e);
+            }
+        });
+    }
+
+    // ─── Server Settings: Auto-abbreviation (no manual input) ─────────────────
+    // Override the live preview to use auto-generated abbreviation from name
+    const serverSettingsNameInputEl = document.getElementById('serverSettingsNameInput');
+    const serverSettingsIconInputEl = document.getElementById('serverSettingsIconInput');
+
+    function getAutoAbbr(name) {
+        if (!name) return '';
+        const words = name.trim().split(/\s+/);
+        if (words.length >= 2) {
+            return (words[0][0] + words[1][0]).toUpperCase();
+        } else {
+            return name.substring(0, 2).toUpperCase();
+        }
+    }
+
+    if (serverSettingsNameInputEl) {
+        serverSettingsNameInputEl.addEventListener('input', () => {
+            const name = serverSettingsNameInputEl.value.trim();
+            document.getElementById('serverSettingsPreviewName').textContent = name || 'Без имени';
+            // Only update abbreviation if no custom icon image
+            const previewIconImg = document.getElementById('serverSettingsPreviewIconImg');
+            if (!previewIconImg || previewIconImg.style.display === 'none') {
+                document.getElementById('serverSettingsPreviewIconText').textContent = getAutoAbbr(name);
+            }
+        });
+    }
+
+    // Server icon upload via clicking the preview circle in settings
+    const serverSettingsPreviewIconContainer = document.getElementById('serverSettingsPreviewIconContainer');
+    const serverSettingsIconFile = document.getElementById('serverSettingsIconFile');
+    let serverSettingsIconDataUrl = null;
+
+    if (serverSettingsPreviewIconContainer && serverSettingsIconFile) {
+        serverSettingsPreviewIconContainer.addEventListener('click', () => serverSettingsIconFile.click());
+        serverSettingsIconFile.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+                serverSettingsIconDataUrl = ev.target.result;
+                // Show image in preview
+                const previewText = document.getElementById('serverSettingsPreviewIconText');
+                let previewImg = document.getElementById('serverSettingsPreviewIconImg');
+                if (!previewImg) {
+                    previewImg = document.createElement('img');
+                    previewImg.id = 'serverSettingsPreviewIconImg';
+                    previewImg.className = 'server-icon-img';
+                    serverSettingsPreviewIconContainer.appendChild(previewImg);
+                }
+                previewImg.src = ev.target.result;
+                previewImg.style.display = 'block';
+                if (previewText) previewText.style.display = 'none';
+            };
+            reader.readAsDataURL(file);
+        });
+    }
+
+    // Also patch serverSettingsSaveBtn to use auto-abbr if icon field is empty
+    const serverSettingsSaveBtnEl = document.getElementById('serverSettingsSaveBtn');
+    if (serverSettingsSaveBtnEl) {
+        // Remove old listener by cloning
+        const newSaveBtn = serverSettingsSaveBtnEl.cloneNode(true);
+        serverSettingsSaveBtnEl.parentNode.replaceChild(newSaveBtn, serverSettingsSaveBtnEl);
+        newSaveBtn.addEventListener('click', async () => {
+            const name = serverSettingsNameInputEl ? serverSettingsNameInputEl.value.trim() : '';
+            const srv = serversList.find(s => s.id === contextServerId);
+            const icon = serverSettingsIconDataUrl || (srv ? srv.icon : getAutoAbbr(name));
+            if (!name) return;
+            try {
+                const r = await fetch(`${API_URL}/api/servers/${contextServerId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, icon })
+                });
+                if (r.ok) {
+                    discordServerSettingsModal.style.display = 'none';
+                    serverSettingsIconDataUrl = null;
+                    fetchServers();
+                }
+            } catch (e) {
+                console.error('Update server error:', e);
+            }
+        });
+    }
+
+    // ─── Server sidebar name click → opens server settings dropdown ───────────
+    const serverSidebarNameBtn = document.getElementById('serverSidebarNameBtn');
+    if (serverSidebarNameBtn) {
+        serverSidebarNameBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (currentServerId) {
+                contextServerId = currentServerId;
+                const menu = document.getElementById('serverContextMenu');
+                if (menu) {
+                    // Update live stats in the setting preview if they open settings later
+                    const srv = serversList.find(s => s.id === currentServerId);
+                    if (srv) {
+                        updateSettingsLiveStats(srv);
+                    }
+                    menu.style.display = 'block';
+                    const rect = serverSidebarNameBtn.getBoundingClientRect();
+                    menu.style.left = `${rect.left}px`;
+                    menu.style.top = `${rect.bottom + window.scrollY}px`;
+                }
+            }
+        });
+    }
+
+    // ─── Resizable Panels ─────────────────────────────────────────────────────
+    function initResizeHandle(handleId, leftSideId, minLeft, maxLeft) {
+        const handle = document.getElementById(handleId);
+        const leftSide = document.getElementById(leftSideId);
+        if (!handle || !leftSide) return;
+
+        let isDragging = false;
+        let startX = 0;
+        let startWidth = 0;
+
+        handle.addEventListener('mousedown', (e) => {
+            isDragging = true;
+            startX = e.clientX;
+            startWidth = leftSide.getBoundingClientRect().width;
+            handle.classList.add('dragging');
+            document.body.style.cursor = 'col-resize';
+            document.body.style.userSelect = 'none';
+            e.preventDefault();
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+            const dx = e.clientX - startX;
+            const newWidth = Math.min(maxLeft, Math.max(minLeft, startWidth + dx));
+            leftSide.style.width = newWidth + 'px';
+            leftSide.style.flexShrink = '0';
+        });
+
+        document.addEventListener('mouseup', () => {
+            if (!isDragging) return;
+            isDragging = false;
+            handle.classList.remove('dragging');
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+        });
+    }
+
+    // Resize between guilds sidebar and app sidebar
+    initResizeHandle('appSidebarHandle', 'appSidebar', 160, 380);
+    // Resize members sidebar
+    initResizeHandle('membersSidebarHandle', 'membersSidebar', 140, 400);
+
+    // ─── Message Right-Click Context Menu ─────────────────────────────────────
+    const messageContextMenu = document.getElementById('messageContextMenu');
+    let ctxMsgData = null; // { id, text, senderEmail, msgEl }
+
+    function hideMessageCtxMenu() {
+        if (messageContextMenu) messageContextMenu.style.display = 'none';
+        ctxMsgData = null;
+    }
+
+    // Delegate right-click to chatHistory
+    chatHistory.addEventListener('contextmenu', (e) => {
+        const msgEl = e.target.closest('.discord-message');
+        if (!msgEl) return;
+        e.preventDefault();
+
+        const msgId = msgEl.getAttribute('data-msg-id');
+        const msgText = msgEl.querySelector('.discord-message-text')?.textContent || '';
+        const msgSender = msgEl.getAttribute('data-sender');
+        const isMine = (msgSender === currentUserEmail);
+
+        ctxMsgData = { id: msgId, text: msgText, senderEmail: msgSender, msgEl, isMine };
+
+        // Show/hide edit & delete for own messages only
+        const editItem = document.getElementById('msgCtxEdit');
+        const deleteItem = document.getElementById('msgCtxDelete');
+        if (editItem) editItem.style.display = isMine ? 'flex' : 'none';
+        if (deleteItem) deleteItem.style.display = isMine ? 'flex' : 'none';
+
+        // Position menu
+        let x = e.clientX, y = e.clientY;
+        messageContextMenu.style.display = 'block';
+        const menuW = messageContextMenu.offsetWidth;
+        const menuH = messageContextMenu.offsetHeight;
+        if (x + menuW > window.innerWidth) x = window.innerWidth - menuW - 8;
+        if (y + menuH > window.innerHeight) y = window.innerHeight - menuH - 8;
+        messageContextMenu.style.left = x + 'px';
+        messageContextMenu.style.top = y + 'px';
+    });
+
+    document.addEventListener('click', () => hideMessageCtxMenu());
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') hideMessageCtxMenu(); });
+
+    // Edit message
+    const msgCtxEdit = document.getElementById('msgCtxEdit');
+    if (msgCtxEdit) {
+        msgCtxEdit.addEventListener('click', () => {
+            if (!ctxMsgData || !ctxMsgData.isMine) return;
+            const { id, text, msgEl } = ctxMsgData;
+            hideMessageCtxMenu();
+
+            // Enable edit mode
+            msgEl.classList.add('editing');
+            msgEl.setAttribute('data-editing', 'true');
+
+            // Build edit area if not already present
+            let editArea = msgEl.querySelector('.message-edit-area');
+            if (!editArea) {
+                editArea = document.createElement('div');
+                editArea.className = 'message-edit-area';
+                editArea.innerHTML = `
+                    <textarea class="message-edit-input" rows="2">${text}</textarea>
+                    <div class="message-edit-actions">
+                        <span>Esc \u2014 </span><span class="edit-cancel">отмена</span>
+                        &nbsp;&bull;&nbsp;
+                        <span class="edit-save">Сохранить</span>
+                    </div>`;
+                const contentDiv = msgEl.querySelector('.discord-message-content');
+                if (contentDiv) contentDiv.appendChild(editArea);
+            }
+            const textarea = editArea.querySelector('.message-edit-input');
+            textarea.focus();
+            textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+
+            // Cancel
+            editArea.querySelector('.edit-cancel').onclick = () => {
+                msgEl.classList.remove('editing');
+                editArea.remove();
+            };
+
+            // Save
+            editArea.querySelector('.edit-save').onclick = async () => {
+                const newText = textarea.value.trim();
+                if (!newText) return;
+                try {
+                    const endpoint = currentChannelId
+                        ? `${API_URL}/api/channels/${currentChannelId}/messages/${id}`
+                        : `${API_URL}/api/messages/${id}`;
+                    const r = await fetch(endpoint, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ text: newText, sender_email: currentUserEmail })
+                    });
+                    if (r.ok) {
+                        const textEl = msgEl.querySelector('.discord-message-text');
+                        if (textEl) textEl.textContent = newText;
+                    }
+                } catch(e) { console.error('Edit message error:', e); }
+                msgEl.classList.remove('editing');
+                editArea.remove();
+            };
+
+            // ESC to cancel
+            textarea.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') { msgEl.classList.remove('editing'); editArea.remove(); }
+                if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); editArea.querySelector('.edit-save').click(); }
+            });
+        });
+    }
+
+    // Reply to message
+    const msgCtxReply = document.getElementById('msgCtxReply');
+    const replyBar = document.getElementById('replyBar');
+    const replyBarName = document.getElementById('replyBarName');
+    const replyBarClose = document.getElementById('replyBarClose');
+    let replyToData = null; // { id, text, senderName }
+
+    if (msgCtxReply) {
+        msgCtxReply.addEventListener('click', () => {
+            if (!ctxMsgData) return;
+            const { id, text, msgEl } = ctxMsgData;
+            const senderName = msgEl.querySelector('.discord-message-author')?.textContent || 'пользователь';
+            replyToData = { id, text, senderName };
+            hideMessageCtxMenu();
+            if (replyBarName) replyBarName.textContent = senderName;
+            if (replyBar) replyBar.classList.add('active');
+            chatInput.focus();
+        });
+    }
+
+    if (replyBarClose) {
+        replyBarClose.addEventListener('click', () => {
+            replyToData = null;
+            if (replyBar) replyBar.classList.remove('active');
+        });
+    }
+
+    // Copy text
+    const msgCtxCopy = document.getElementById('msgCtxCopy');
+    if (msgCtxCopy) {
+        msgCtxCopy.addEventListener('click', () => {
+            if (!ctxMsgData) return;
+            navigator.clipboard.writeText(ctxMsgData.text).catch(() => {
+                const ta = document.createElement('textarea');
+                ta.value = ctxMsgData.text;
+                document.body.appendChild(ta);
+                ta.select();
+                document.execCommand('copy');
+                document.body.removeChild(ta);
+            });
+            hideMessageCtxMenu();
+        });
+    }
+
+    // Delete message
+    const msgCtxDelete = document.getElementById('msgCtxDelete');
+    if (msgCtxDelete) {
+        msgCtxDelete.addEventListener('click', async () => {
+            if (!ctxMsgData || !ctxMsgData.isMine) return;
+            const { id, msgEl } = ctxMsgData;
+            hideMessageCtxMenu();
+            try {
+                const endpoint = currentChannelId
+                    ? `${API_URL}/api/channels/${currentChannelId}/messages/${id}`
+                    : `${API_URL}/api/messages/${id}`;
+                const r = await fetch(endpoint, {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ sender_email: currentUserEmail })
+                });
+                if (r.ok) {
+                    msgEl.style.transition = 'opacity 0.3s';
+                    msgEl.style.opacity = '0';
+                    setTimeout(() => msgEl.remove(), 300);
+                }
+            } catch(e) { console.error('Delete message error:', e); }
+        });
+    }
+
+    // ─── Channel Right-Click Context Menu ─────────────────────────────────────
+    const channelContextMenu = document.getElementById('channelContextMenu');
+    const chCtxMute = document.getElementById('chCtxMute');
+    let ctxChannelId = null;
+    const mutedChannels = new Set();
+
+    function hideChannelCtxMenu() {
+        if (channelContextMenu) channelContextMenu.style.display = 'none';
+        ctxChannelId = null;
+    }
+
+    // Delegate to channelsList
+    const channelsListEl = document.getElementById('channelsList');
+    if (channelsListEl) {
+        channelsListEl.addEventListener('contextmenu', (e) => {
+            const chItem = e.target.closest('.channel-item');
+            if (!chItem) return;
+            e.preventDefault();
+            ctxChannelId = parseInt(chItem.getAttribute('data-id'));
+
+            // Update mute label
+            if (chCtxMute) {
+                const isMuted = mutedChannels.has(ctxChannelId);
+                chCtxMute.innerHTML = isMuted
+                    ? '<span class="material-symbols-outlined">volume_up</span> Включить звук канала'
+                    : '<span class="material-symbols-outlined">volume_off</span> Заглушить канал';
+                chCtxMute.className = isMuted ? 'ch-ctx-item muted' : 'ch-ctx-item';
+            }
+
+            let x = e.clientX, y = e.clientY;
+            channelContextMenu.style.display = 'block';
+            const mw = channelContextMenu.offsetWidth, mh = channelContextMenu.offsetHeight;
+            if (x + mw > window.innerWidth) x = window.innerWidth - mw - 8;
+            if (y + mh > window.innerHeight) y = window.innerHeight - mh - 8;
+            channelContextMenu.style.left = x + 'px';
+            channelContextMenu.style.top = y + 'px';
+        });
+    }
+
+    document.addEventListener('click', () => hideChannelCtxMenu());
+
+    if (chCtxMute) {
+        chCtxMute.addEventListener('click', () => {
+            if (ctxChannelId === null) return;
+            if (mutedChannels.has(ctxChannelId)) {
+                mutedChannels.delete(ctxChannelId);
+            } else {
+                mutedChannels.add(ctxChannelId);
+            }
+            // Update visual
+            const chItem = channelsListEl ? channelsListEl.querySelector(`.channel-item[data-id="${ctxChannelId}"]`) : null;
+            if (chItem) {
+                chItem.classList.toggle('muted', mutedChannels.has(ctxChannelId));
+            }
+            hideChannelCtxMenu();
+        });
+    }
+
+    // ─── Patch renderMessages to include msg IDs and sender data attrs ─────────
+    // Override the global renderMessages used by channels to add data attributes needed for context menu
+    const _origRenderMessages = window._renderMessages;
+
+
+    let currentUserProfileData = {};
+
+    function populateSettingsUI() {
+        if (!currentUserProfileData) return;
+        
+        const name = currentUserProfileData.name || '';
+        document.getElementById('settingsMiniName').textContent = name;
+        document.getElementById('settingsProfileNick').textContent = name;
+        document.getElementById('settingsValDisplayName').textContent = name;
+        
+        const avatar = currentUserProfileData.avatar;
+        const avatarHtml = avatar ? `<img src="${avatar}" style="width: 100%; height: 100%; object-fit: cover;">` : '<span class="material-symbols-outlined" style="font-size: 28px; color: #fff;">account_circle</span>';
+        document.getElementById('settingsMiniAvatar').innerHTML = avatarHtml;
+        
+        const cardAvatarHtml = avatar ? `<img src="${avatar}" style="width: 100%; height: 100%; object-fit: cover;">` : '<span class="material-symbols-outlined" style="font-size: 60px; color: #fff;">account_circle</span>';
+        document.getElementById('settingsAvatarContainer').innerHTML = cardAvatarHtml;
+
+        const username = currentUserProfileData.username || (currentUserProfileData.email ? currentUserProfileData.email.split('@')[0] : 'user');
+        document.getElementById('settingsValUsername').textContent = username;
+
+        const email = currentUserProfileData.email || '';
+        const maskedEmail = email ? maskEmail(email) : '';
+        const emailEl = document.getElementById('settingsValEmail');
+        emailEl.textContent = maskedEmail;
+        emailEl.dataset.actual = email;
+        emailEl.dataset.masked = maskedEmail;
+        document.getElementById('toggleSettingsEmailBtn').textContent = 'Показать';
+
+        const phone = currentUserProfileData.phone || '';
+        const maskedPhone = phone ? maskPhone(phone) : 'Не указан';
+        const phoneEl = document.getElementById('settingsValPhone');
+        phoneEl.textContent = maskedPhone;
+        phoneEl.dataset.actual = phone || 'Не указан';
+        phoneEl.dataset.masked = maskedPhone;
+        document.getElementById('toggleSettingsPhoneBtn').textContent = phone ? 'Показать' : '';
+        document.getElementById('deleteSettingsPhoneBtn').style.display = phone ? 'inline-block' : 'none';
+    }
+
+    function maskEmail(email) {
+        const parts = email.split('@');
+        if (parts.length < 2) return email;
+        const name = parts[0];
+        const domain = parts[1];
+        if (name.length <= 2) return '*'.repeat(name.length) + '@' + domain;
+        return name[0] + '*'.repeat(name.length - 2) + name[name.length - 1] + '@' + domain;
+    }
+
+    function maskPhone(phone) {
+        if (phone.length <= 4) return '*'.repeat(phone.length);
+        return '*'.repeat(phone.length - 4) + phone.slice(-4);
+    }
+
+    document.getElementById('toggleSettingsEmailBtn').addEventListener('click', (e) => {
+        const emailEl = document.getElementById('settingsValEmail');
+        if (e.target.textContent === 'Показать') {
+            emailEl.textContent = emailEl.dataset.actual;
+            e.target.textContent = 'Скрыть';
+        } else {
+            emailEl.textContent = emailEl.dataset.masked;
+            e.target.textContent = 'Показать';
+        }
+    });
+
+    document.getElementById('toggleSettingsPhoneBtn').addEventListener('click', (e) => {
+        const phoneEl = document.getElementById('settingsValPhone');
+        if (!phoneEl.dataset.actual || phoneEl.dataset.actual === 'Не указан') return;
+        if (e.target.textContent === 'Показать') {
+            phoneEl.textContent = phoneEl.dataset.actual;
+            e.target.textContent = 'Скрыть';
+        } else {
+            phoneEl.textContent = phoneEl.dataset.masked;
+            e.target.textContent = 'Показать';
+        }
+    });
+
+    document.getElementById('deleteSettingsPhoneBtn').addEventListener('click', async () => {
+        if (!confirm('Вы действительно хотите удалить номер телефона?')) return;
+        try {
+            const r = await fetch(`${API_URL}/update_profile`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: currentUserEmail, phone: '' })
+            });
+            if (r.ok) {
+                currentUserProfileData.phone = '';
+                populateSettingsUI();
+                showMessage('Номер телефона удален', 'success');
+            }
+        } catch(e) {
+            console.error('Delete phone error:', e);
+        }
+    });
+
+    document.getElementById('openSettings').addEventListener('click', () => {
+        setQuality(false);
+        populateSettingsUI();
+        document.getElementById('discordSettingsModal').style.display = 'flex';
+    });
+
+    function closeDiscordSettings() {
+        document.getElementById('discordSettingsModal').style.display = 'none';
+        setQuality(true);
+    }
+    document.getElementById('closeDiscordSettingsBtn').addEventListener('click', closeDiscordSettings);
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            if (document.getElementById('settingsEditModal').style.display === 'flex') {
+                document.getElementById('settingsEditModal').style.display = 'none';
+            } else if (document.getElementById('discordSettingsModal').style.display === 'flex') {
+                closeDiscordSettings();
+            }
+        }
+    });
+
+    document.getElementById('settingsEditUserCardBtn').addEventListener('click', () => profAvatarFile.click());
+    document.getElementById('settingsAvatarContainer').addEventListener('click', () => profAvatarFile.click());
+    document.getElementById('settingsEditProfileTrigger').addEventListener('click', () => profAvatarFile.click());
+
+    document.querySelectorAll('.settings-menu-item').forEach(item => {
+        item.addEventListener('click', (e) => {
+            document.querySelectorAll('.settings-menu-item').forEach(i => i.classList.remove('active'));
+            item.classList.add('active');
+            
+            const section = item.dataset.section;
+            if (section === 'my_account') {
+                document.getElementById('sectionMyAccount').style.display = 'block';
+                document.getElementById('sectionMockSettings').style.display = 'none';
+            } else {
+                document.getElementById('sectionMyAccount').style.display = 'none';
+                document.getElementById('sectionMockSettings').style.display = 'flex';
+                document.getElementById('mockSectionTitle').textContent = item.textContent;
+            }
+        });
+    });
+
+    let currentEditField = null;
+    const settingsEditModal = document.getElementById('settingsEditModal');
+    const settingsEditModalTitle = document.getElementById('settingsEditModalTitle');
+    const settingsEditModalLabel = document.getElementById('settingsEditModalLabel');
+    const settingsEditModalInput = document.getElementById('settingsEditModalInput');
+
+    function openSettingsEditModal(field) {
+        currentEditField = field;
+        settingsEditModalInput.value = '';
+        settingsEditModalInput.type = 'text';
+
+        if (field === 'display_name') {
+            settingsEditModalTitle.textContent = 'Изменить отображаемое имя';
+            settingsEditModalLabel.textContent = 'Новое отображаемое имя';
+            settingsEditModalInput.value = currentUserProfileData.name || '';
+        } else if (field === 'username') {
+            settingsEditModalTitle.textContent = 'Изменить имя пользователя';
+            settingsEditModalLabel.textContent = 'Новое имя пользователя';
+            settingsEditModalInput.value = currentUserProfileData.username || (currentUserProfileData.email ? currentUserProfileData.email.split('@')[0] : 'user');
+        } else if (field === 'email') {
+            settingsEditModalTitle.textContent = 'Изменить адрес электронной почты';
+            settingsEditModalLabel.textContent = 'Новый адрес электронной почты';
+            settingsEditModalInput.value = currentUserProfileData.email || '';
+        } else if (field === 'phone') {
+            settingsEditModalTitle.textContent = 'Изменить номер телефона';
+            settingsEditModalLabel.textContent = 'Новый номер телефона';
+            settingsEditModalInput.value = currentUserProfileData.phone || '';
+        } else if (field === 'password') {
+            settingsEditModalTitle.textContent = 'Сменить пароль';
+            settingsEditModalLabel.textContent = 'Новый пароль';
+            settingsEditModalInput.type = 'password';
+        }
+
+        settingsEditModal.style.display = 'flex';
+        settingsEditModalInput.focus();
+    }
+
+    document.querySelectorAll('.settings-change-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const field = e.currentTarget.dataset.field;
+            openSettingsEditModal(field);
+        });
+    });
+
+    document.getElementById('settingsChangePassBtn').addEventListener('click', () => {
+        openSettingsEditModal('password');
+    });
+
+    document.getElementById('submitSettingsEditModalBtn').addEventListener('click', async () => {
+        const val = settingsEditModalInput.value.trim();
+        if (currentEditField !== 'password' && !val && currentEditField !== 'phone') {
+            alert('Поле не может быть пустым');
+            return;
+        }
+
+        const payload = { email: currentUserEmail };
+        
+        if (currentEditField === 'display_name') {
+            payload.name = val;
+        } else if (currentEditField === 'username') {
+            payload.username = val;
+        } else if (currentEditField === 'email') {
+            if (!val.includes('@')) {
+                alert('Некорректный email');
+                return;
+            }
+            payload.new_email = val;
+        } else if (currentEditField === 'phone') {
+            payload.phone = val;
+        } else if (currentEditField === 'password') {
+            if (val.length < 6) {
+                alert('Пароль должен быть не менее 6 символов');
+                return;
+            }
+            payload.password = val;
+        }
+
+        try {
+            const r = await fetch(`${API_URL}/update_profile`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const data = await r.json();
+            if (r.ok) {
+                if (currentEditField === 'display_name') {
+                    currentUserProfileData.name = val;
+                    document.getElementById('miniName').textContent = val;
+                } else if (currentEditField === 'username') {
+                    currentUserProfileData.username = val;
+                } else if (currentEditField === 'email') {
+                    currentUserProfileData.email = val;
+                    currentUserEmail = val;
+                } else if (currentEditField === 'phone') {
+                    currentUserProfileData.phone = val;
+                }
+                
+                populateSettingsUI();
+                settingsEditModal.style.display = 'none';
+                showMessage('Настройки успешно изменены!', 'success');
+            } else {
+                alert('Ошибка: ' + (data.error || 'не удалось сохранить'));
+            }
+        } catch (e) {
+            console.error('Update setting error:', e);
+            alert('Ошибка сети при сохранении настроек');
+        }
+    });
+
+    document.getElementById('closeSettingsEditModalBtn').addEventListener('click', () => {
+        settingsEditModal.style.display = 'none';
     });
 
     // --- Auth Forms Logic ---
     document.getElementById('registrationForm').addEventListener('submit', async e => {
         e.preventDefault();
-        const name=document.getElementById('regName').value;
-        const email=document.getElementById('regEmail').value;
+        const name=document.getElementById('regName').value.trim();
+        const email=document.getElementById('regEmail').value.trim();
         const password=document.getElementById('regPassword').value;
         const passwordConfirm=document.getElementById('regPasswordConfirm').value;
         const phone=document.getElementById('regPhone').value;
         const avatarFile=document.getElementById('regAvatarFile').files[0];
-        const captchaResponse = window.grecaptcha ? grecaptcha.getResponse() : '';
-
+        
+        if (!name) {
+            showMessage('Пожалуйста, введите имя', 'error');
+            return;
+        }
+        if (!email) {
+            showMessage('Пожалуйста, введите email или ID', 'error');
+            return;
+        }
+        if (!email.includes('@')) {
+            showMessage('Адрес электронной почты должен содержать символ "@". В адресе "' + email + '" отсутствует символ "@".', 'error');
+            return;
+        }
+        if (!password) {
+            showMessage('Пожалуйста, введите пароль', 'error');
+            return;
+        }
+        if (password.length < 6) {
+            showMessage('Пароль должен быть не менее 6 символов', 'error');
+            return;
+        }
         if (password !== passwordConfirm) {
             showMessage('Пароли не совпадают', 'error');
             return;
         }
 
-        if (!captchaResponse) {
-            showMessage('Пожалуйста, пройдите проверку на бота', 'error');
+        const recaptchaResponse = grecaptcha.getResponse();
+        if (!recaptchaResponse) {
+            showMessage('Пожалуйста, подтвердите капчу', 'error');
             return;
         }
 
         showMessage('Регистрация…', 'info');
         try {
-            const r = await fetch(`${API_URL}/register`, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,email,password,captcha:captchaResponse})});
+            const r = await fetch(`${API_URL}/register`, {
+                method:'POST',
+                headers:{'Content-Type':'application/json'},
+                body:JSON.stringify({
+                    name,
+                    email,
+                    password,
+                    g_recaptcha_response: recaptchaResponse
+                })
+            });
             const d = await r.json();
             if (r.ok) {
                 let finalAvatarUrl = '';
@@ -1186,20 +2780,44 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 showMessage('Успех!','success'); 
                 document.getElementById('registrationForm').reset(); 
+                if (window.grecaptcha) grecaptcha.reset();
+                localStorage.setItem('has_visited', 'true');
                 setTimeout(()=>loadProfileUI({name:d.name,email:d.email,avatar:finalAvatarUrl,bio:'',phone}),1000); 
             }
-            else { showMessage(d.error||'Ошибка','error'); if(window.grecaptcha) grecaptcha.reset(); }
-        } catch (err) { showMessage('Ошибка сервера','error'); if(window.grecaptcha) grecaptcha.reset(); }
+            else { 
+                showMessage(d.error||'Ошибка','error'); 
+                if (window.grecaptcha) grecaptcha.reset(); 
+            }
+        } catch (err) { 
+            showMessage('Ошибка сервера','error'); 
+            if (window.grecaptcha) grecaptcha.reset(); 
+        }
     });
 
     document.getElementById('loginForm').addEventListener('submit', async e => {
         e.preventDefault();
-        const email=document.getElementById('loginEmail').value, password=document.getElementById('loginPassword').value;
+        const email=document.getElementById('loginEmail').value.trim(), password=document.getElementById('loginPassword').value;
+        if (!email) {
+            showMessage('Пожалуйста, введите email или ID', 'error');
+            return;
+        }
+        if (!email.includes('@')) {
+            showMessage('Адрес электронной почты должен содержать символ "@". В адресе "' + email + '" отсутствует символ "@".', 'error');
+            return;
+        }
+        if (!password) {
+            showMessage('Пожалуйста, введите пароль', 'error');
+            return;
+        }
         showMessage('Вход…','info');
         try {
             const r = await fetch(`${API_URL}/login`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,password})});
             const d = await r.json();
-            if (r.ok) { showMessage(`Привет, ${d.name}!`,'success'); setTimeout(()=>loadProfileUI(d),500); }
+            if (r.ok) { 
+                showMessage(`Привет, ${d.name}!`,'success'); 
+                localStorage.setItem('has_visited', 'true');
+                setTimeout(()=>loadProfileUI(d),500); 
+            }
             else showMessage(d.error||'Ошибка входа','error');
         } catch (err) { showMessage('Ошибка сервера','error'); }
     });
@@ -1208,7 +2826,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
     document.getElementById('forgotPasswordForm').addEventListener('submit', async e => {
         e.preventDefault();
-        const email = document.getElementById('forgotEmail').value;
+        const email = document.getElementById('forgotEmail').value.trim();
+        if (!email) {
+            showMessage('Пожалуйста, введите email или ID', 'error');
+            return;
+        }
+        if (!email.includes('@')) {
+            showMessage('Адрес электронной почты должен содержать символ "@". В адресе "' + email + '" отсутствует символ "@".', 'error');
+            return;
+        }
         showMessage('Отправка кода…', 'info');
         try {
             const r = await fetch(`${API_URL}/forgot_password`, {
@@ -1334,6 +2960,22 @@ document.addEventListener('DOMContentLoaded', () => {
         const d = JSON.parse(storedUser);
         localStorage.removeItem('oauth_user');
         loadProfileUI(d);
+    }
+
+    // Helper to read cookies
+    function getCookie(name) {
+        const value = `; ${document.cookie}`;
+        const parts = value.split(`; ${name}=`);
+        if (parts.length === 2) return parts.pop().split(';').shift();
+    }
+
+    // Device / IP State memory check to show login by default for returning visitors
+    const isVisited = localStorage.getItem('has_visited') === 'true' || getCookie('ip_visited') === 'true';
+    if (isVisited) {
+        showSection(loginSection, 'Вход | Premium Project');
+    } else {
+        showSection(registerSection, 'Регистрация | Premium Project');
+        localStorage.setItem('has_visited', 'true');
     }
 });
 
